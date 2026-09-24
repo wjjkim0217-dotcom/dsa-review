@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Re-practice coding-interview problems on a spaced-repetition schedule.">
+  <title>DSA Review</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script type="module" src="/static/app.js"></script>
+</head>
+<body>
+  <button type="button" class="skip-link" id="skip-link">Skip to content</button>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#/today">
+        <img src="/static/favicon.svg" alt="" width="26" height="26">
+        <span>DSA Review</span>
+      </a>
+      <nav class="nav" aria-label="Main">
+        <ul>
+          <li>
+            <a href="#/today" data-nav="today">Today
+              <span class="nav-badge" id="due-badge" hidden></span>
+            </a>
+          </li>
+          <li><a href="#/add" data-nav="add">Add problem</a></li>
+          <li><a href="#/library" data-nav="library">Library</a></li>
+          <li><a href="#/settings" data-nav="settings">Settings</a></li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <noscript><p>DSA Review needs JavaScript. Please enable it and reload.</p></noscript>
+    <div class="loading">Loading</div>
+  </main>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-body">
+    <h2 id="confirm-title">Are you sure?</h2>
+    <p id="confirm-body"></p>
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-choice="cancel">Cancel</button>
+      <button type="button" class="btn btn-danger-solid" data-choice="confirm">Confirm</button>
+    </div>
+  </dialog>
+</body>
+</html>
