@@ -1694,7 +1694,13 @@ function tagFilter(ctrl) {
   return h('div', { class: 'field-inline' }, h('label', { for: 'today-tag', text: 'Focus on' }), select);
 }
 
-async function showCurrent(ctrl, holder, focusCard) {
+/**
+ * Load the session's current problem into `holder` (a loading placeholder).
+ * With `replacing` (the card controller already on screen), the new card takes
+ * that card's place once it has loaded, without scrolling: used by "Skip for now"
+ * so the page doesn't jump.
+ */
+async function showCurrent(ctrl, holder, focusCard, { replacing = null } = {}) {
   const s = state.sessions[ctrl.deck];
   const id = s.order[0];
   const token = ++ctrl.cardToken;
@@ -1706,12 +1712,16 @@ async function showCurrent(ctrl, holder, focusCard) {
     if (err.status === 404) {
       s.order = s.order.filter((x) => x !== id);
       renderSession(ctrl);
+    } else if (replacing) {
+      toastError(err);
+      renderSession(ctrl); // fall back to a normal re-render, which shows a Retry
     } else {
       holder.replaceChildren(errorState(err, () => renderSession(ctrl)));
     }
     return;
   }
   if (token !== ctrl.cardToken || !isCurrent(ctrl.seq) || s.order[0] !== id) return;
+  if (replacing) replacing.destroy();
 
   const card = createReviewCard(p, {
     mode: 'session',
@@ -1732,14 +1742,25 @@ async function showCurrent(ctrl, holder, focusCard) {
         return;
       }
       s.order.push(s.order.shift());
-      renderSession(ctrl, { focusCard: true });
+      // Swap the card in place: the current card stays on screen (dimmed and inert,
+      // so its buttons and shortcuts can't fire) until the next problem has loaded,
+      // then the new card takes its exact spot. Nothing else re-renders and the page
+      // doesn't scroll. (The progress bar doesn't change on a skip.)
+      const current = ctrl.card;
+      state.activeReview = null;
+      current.el.classList.add('is-busy');
+      current.el.inert = true;
+      current.el.setAttribute('aria-busy', 'true');
+      showCurrent(ctrl, current.el, true, { replacing: current });
     },
   });
   holder.replaceWith(card.el);
   ctrl.card = card;
   state.activeReview = card;
   if (focusCard) {
-    revealTop(ctrl.sessionEl);
+    if (!replacing) revealTop(ctrl.sessionEl);
+    // The Skip / rating button that had focus is gone now; move focus to the new
+    // problem's title (focusTitle never scrolls).
     const active = document.activeElement;
     if (!active || active === document.body || !active.isConnected) card.focusTitle();
   }
