@@ -2,6 +2,7 @@
  * Vanilla JS, no build step, no external resources.
  * All user-provided text is rendered with textContent / createElement (never innerHTML).
  */
+import { createEditor } from './vendor/codemirror.bundle.js';
 
 // ================================================================ constants
 const RATINGS = [
@@ -68,7 +69,9 @@ const ICONS = {
   upload: ['M12 15V4', 'M7 9l5-5 5 5', 'M5 20h14'],
   info: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 11v5', 'M12 7.5v.01'],
   plus: ['M12 5v14', 'M5 12h14'],
+  shuffle: ['M16 4h4v4', 'M4 20L20 4', 'M20 16v4h-4', 'M15 15l5 5', 'M4 4l5 5'],
   done: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M8 12.5l2.8 2.8L16 10'],
+  spark: ['M12 3l1.7 5 5 1.7-5 1.7-1.7 5-1.7-5-5-1.7 5-1.7z', 'M19 15l.8 2.3L22 18l-2.2.7-.8 2.3-.8-2.3L16 18l2.2-.7z'],
 };
 
 function icon(name, size = 16) {
@@ -129,9 +132,12 @@ class ApiError extends Error {
   }
 }
 
-/** Call the backend. Non-GET requests always send JSON. Throws ApiError with the server's message. */
-async function api(method, path, body) {
+/** Call the backend. Non-GET requests always send JSON. Throws ApiError with the server's message.
+ * `extra.signal` (optional) is an AbortSignal, so a caller can cancel a slow request
+ * (e.g. Ask Claude's Cancel button) - fetch then rejects with a DOMException named "AbortError". */
+async function api(method, path, body, extra) {
   const opts = { method, headers: { Accept: 'application/json' } };
+  if (extra && extra.signal) opts.signal = extra.signal;
   if (method !== 'GET') {
     opts.headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(body ?? {});
@@ -139,7 +145,8 @@ async function api(method, path, body) {
   let res;
   try {
     res = await fetch(path, opts);
-  } catch {
+  } catch (err) {
+    if (err && err.name === 'AbortError') throw err;
     throw new ApiError("Can't reach the DSA Review server. Is it still running?", 0);
   }
   let data = null;
@@ -231,6 +238,76 @@ function confirmDialog({ title, body, confirmLabel = 'Confirm' }) {
   });
 }
 
+/**
+ * Accessible "More" dropdown menu, built on <details>/<summary>.
+ * items: array of { label, onClick, hidden, disabled, danger }, or a function
+ * returning that array (called fresh each time the menu opens, so item text/
+ * disabled state can reflect the latest data without rebuilding the menu).
+ * Closes on Escape, on an outside click, and after an item is activated;
+ * each close returns focus to the trigger (the <summary>).
+ */
+function menuButton({ label = 'More', icon: iconName = null, items, small = true }) {
+  const summary = h('summary', { class: `btn${small ? ' btn-sm' : ''} menu-trigger` }, iconName ? icon(iconName, 14) : null, label);
+  const list = h('div', { class: 'menu-list', role: 'menu' });
+  const det = h('details', { class: 'menu' }, summary, list);
+
+  function currentItems() {
+    return typeof items === 'function' ? items() : items;
+  }
+
+  function renderItems() {
+    const visible = currentItems().filter((it) => !it.hidden);
+    list.replaceChildren(...visible.map((it) => h('button', {
+      type: 'button',
+      class: `menu-item${it.danger ? ' is-danger' : ''}`,
+      role: 'menuitem',
+      disabled: Boolean(it.disabled),
+      onclick: () => {
+        close();
+        it.onClick();
+      },
+    }, it.label)));
+  }
+
+  function close() {
+    if (det.open) det.open = false;
+  }
+  function onDocClick(e) {
+    if (!det.contains(e.target)) close();
+  }
+  function onKeydown(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+      summary.focus();
+    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      const focusable = [...list.querySelectorAll('button:not(:disabled)')];
+      if (!focusable.length) return;
+      e.preventDefault();
+      const idx = focusable.indexOf(document.activeElement);
+      const dir = e.key === 'ArrowDown' ? 1 : -1;
+      const next = focusable[(idx + dir + focusable.length) % focusable.length];
+      next.focus();
+    }
+  }
+  det.addEventListener('toggle', () => {
+    if (det.open) {
+      renderItems();
+      document.addEventListener('click', onDocClick, true);
+      document.addEventListener('keydown', onKeydown, true);
+      const first = list.querySelector('button:not(:disabled)');
+      if (first) first.focus();
+    } else {
+      document.removeEventListener('click', onDocClick, true);
+      document.removeEventListener('keydown', onKeydown, true);
+    }
+  });
+  renderItems();
+
+  return { el: det, close, refresh: renderItems };
+}
+
 // ================================================================ formatting
 function startOfLocalDay(d) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -238,7 +315,8 @@ function startOfLocalDay(d) {
 
 /** Hours after midnight when a new study day begins (Settings → "New day starts at"). */
 function dayStartMs() {
-  const h = state.summary && state.summary.settings ? Number(state.summary.settings.day_starts_at) : 4;
+  const any = state.summaries.main || state.summaries.neetcode;
+  const h = any && any.settings ? Number(any.settings.day_starts_at) : 4;
   return (Number.isFinite(h) ? h : 4) * 3600000;
 }
 
@@ -349,16 +427,18 @@ function parseTagList(text) {
 
 // ================================================================ app state
 const state = {
-  summary: null,
+  summaries: { main: null, neetcode: null }, // GET /api/summary?deck=..., cached per deck
+  latestSummary: null, // whichever summary was fetched last (drives the nav badges)
   tags: [],
-  session: null, // { key, tag, order: [id], done }
-  todayTag: '',
-  library: { q: '', tag: '', status: '', sortKey: 'next', sortDir: 1 },
+  sessions: { main: null, neetcode: null }, // per deck: { key, tag, order: [id], done }
+  todayTags: { main: '', neetcode: '' },    // per-deck "Focus on" tag filter
+  library: { q: '', tag: '', status: '', deck: '', sortKey: 'next', sortDir: 1 },
+  neetcodeFilters: null,
   cleanups: [],
   seq: 0,
   firstRender: true,
   activeReview: null, // review card controller that receives keyboard shortcuts
-  today: null, // Today view controller while mounted
+  today: null, // Today / NeetCode review view controller while mounted
   detail: null, // Problem view controller while mounted
 };
 
@@ -370,18 +450,36 @@ function isCurrent(seq) {
   return seq === state.seq;
 }
 
-async function refreshSummary() {
-  const s = await api('GET', '/api/summary');
-  state.summary = s;
-  updateBadge();
+/** Fetch and cache the summary for one deck ('main' or 'neetcode'), then refresh both nav badges. */
+async function refreshSummary(deck = 'main') {
+  const s = await api('GET', `/api/summary?deck=${deck}`);
+  state.summaries[deck] = s;
+  state.latestSummary = s;
+  updateBadges();
   return s;
 }
 
-function updateBadge() {
-  const badge = document.getElementById('due-badge');
-  const n = state.summary ? state.summary.counts.due : 0;
-  badge.hidden = n === 0;
-  badge.replaceChildren(String(n), srOnly(' due'));
+/** Refresh both decks' summaries (used after any write, since a NeetCode change can affect
+ * the main page when the "show NeetCode on main Today" toggle is on, and vice versa). */
+function refreshSummaries() {
+  return Promise.all([refreshSummary('main'), refreshSummary('neetcode')]).catch(() => {});
+}
+
+function updateBadges() {
+  // Every summary carries deck_counts (for all decks) and the current settings, so the
+  // most recently fetched one is always the freshest source for both badges.
+  const latest = state.latestSummary;
+  const dc = latest ? latest.deck_counts : null;
+  const inMain = Boolean(latest && latest.settings.neetcode_in_main);
+  const mainDue = dc ? dc.main.due + (inMain ? dc.neetcode.due : 0) : 0;
+  const ncDue = dc ? dc.neetcode.due : 0;
+
+  const mainBadge = document.getElementById('due-badge');
+  mainBadge.hidden = mainDue === 0;
+  mainBadge.replaceChildren(String(mainDue), srOnly(' due'));
+  const ncBadge = document.getElementById('neetcode-badge');
+  ncBadge.hidden = ncDue === 0;
+  ncBadge.replaceChildren(String(ncDue), srOnly(' due'));
 }
 
 async function loadTags() {
@@ -422,6 +520,10 @@ function statusPill(p) {
   return h('span', { class: `pill pill-${p.status}`, text: STATUS_LABEL[p.status] || p.status });
 }
 
+function deckPill(deck) {
+  return h('span', { class: `pill pill-deck-${deck}`, text: deck === 'neetcode' ? 'NeetCode' : 'Main' });
+}
+
 function titleLink(p, iconSize) {
   if (!p.url) return p.title;
   return h('a', { href: p.url, target: '_blank', rel: 'noopener noreferrer' },
@@ -457,6 +559,571 @@ function codeBlock(code, language, label = 'Solution') {
       h('span', null, label, language ? ` · ${language}` : ''),
       copyBtn),
     pre);
+}
+
+// ================================================================ attempt editor
+// One shared "recode it" component: a CodeMirror editor + Run/stdin/reset/copy
+// toolbar + an output panel, used both by the problem page's "Attempt" card
+// (autosaving to that problem's draft) and by the review card's "Code it here"
+// panel (blank each time, saved to the draft only on request).
+//
+// `attempt-assist` used to be a deliberately empty hook; it now holds the
+// "Ask Claude" button (see claudeAssist() below), which opens a panel under
+// the output for debugging help.
+
+// ================================================================ safe Markdown renderer
+// Renders Claude's replies. Deliberately hand-written and small (headings,
+// paragraphs, bold/italic, inline code, fenced code blocks with a Copy
+// button, lists, and http(s)-only links) - it builds DOM nodes directly and
+// never touches innerHTML with untrusted text, so there's no way for a reply
+// to inject markup (e.g. an `<img onerror=...>` just renders as plain text).
+function mdInline(text, container) {
+  const re = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\))|(\*[^*\n]+\*)|(_[^_\n]+_)/g;
+  let last = 0;
+  let m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) container.append(document.createTextNode(text.slice(last, m.index)));
+    if (m[1]) container.append(h('code', { text: m[1].slice(1, -1) }));
+    else if (m[2]) container.append(h('strong', { text: m[2].slice(2, -2) }));
+    else if (m[3]) container.append(h('a', { href: m[5], target: '_blank', rel: 'noopener noreferrer' }, m[4]));
+    else if (m[6]) container.append(h('em', { text: m[6].slice(1, -1) }));
+    else if (m[7]) container.append(h('em', { text: m[7].slice(1, -1) }));
+    last = re.lastIndex;
+  }
+  if (last < text.length) container.append(document.createTextNode(text.slice(last)));
+}
+
+function mdCodeBlock(code, lang) {
+  const codeEl = h('code', { text: code });
+  const pre = h('pre', { class: 'md-pre', tabindex: '0', 'aria-label': lang ? `${lang} code` : 'code' }, codeEl);
+  const copyBtn = h('button', { type: 'button', class: 'btn btn-ghost btn-sm' }, icon('copy', 14), 'Copy');
+  let resetTimer;
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(code);
+      copyBtn.replaceChildren(icon('check', 14), 'Copied');
+      clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => copyBtn.replaceChildren(icon('copy', 14), 'Copy'), 1800);
+    } catch {
+      toast("Couldn't copy automatically. Select the code and press Ctrl+C.", { type: 'error' });
+    }
+  });
+  return h('div', { class: 'md-code' },
+    h('div', { class: 'md-code-head' }, h('span', { text: lang || 'code' }), copyBtn),
+    pre);
+}
+
+const LIST_RE = /^(\s*)([-*]|\d+\.)\s+(.*)$/;
+
+/** Renders a Markdown string into a DOM node (never innerHTML). */
+function renderMarkdown(text) {
+  const root = h('div', { class: 'md' });
+  const lines = String(text ?? '').replace(/\r\n/g, '\n').split('\n');
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) {
+      i++;
+      continue;
+    }
+    const fence = line.match(/^```\s*(\S*)\s*$/);
+    if (fence) {
+      const lang = fence[1] || '';
+      const codeLines = [];
+      i++;
+      while (i < lines.length && !/^```\s*$/.test(lines[i])) {
+        codeLines.push(lines[i]);
+        i++;
+      }
+      i++; // skip the closing fence (or end of text, if it was never closed)
+      root.append(mdCodeBlock(codeLines.join('\n'), lang));
+      continue;
+    }
+    const heading = line.match(/^(#{1,6})\s+(.*)$/);
+    if (heading) {
+      const level = Math.min(heading[1].length + 2, 6); // nest under the panel's own headings
+      const hEl = h(`h${level}`, { class: 'md-heading' });
+      mdInline(heading[2], hEl);
+      root.append(hEl);
+      i++;
+      continue;
+    }
+    if (LIST_RE.test(line)) {
+      const ordered = /^\d+\.$/.test(line.match(LIST_RE)[2]);
+      const listEl = h(ordered ? 'ol' : 'ul');
+      while (i < lines.length && LIST_RE.test(lines[i])) {
+        const li = h('li');
+        mdInline(lines[i].match(LIST_RE)[3], li);
+        listEl.append(li);
+        i++;
+      }
+      root.append(listEl);
+      continue;
+    }
+    const paraLines = [];
+    while (i < lines.length && lines[i].trim() && !/^```/.test(lines[i]) &&
+           !/^#{1,6}\s/.test(lines[i]) && !LIST_RE.test(lines[i])) {
+      paraLines.push(lines[i]);
+      i++;
+    }
+    const p = h('p');
+    mdInline(paraLines.join(' '), p);
+    root.append(p);
+  }
+  return root;
+}
+
+// ================================================================ Ask Claude panel
+// Shared by the problem page's Attempt card and the review card's "Code it
+// here" panel (via attemptEditor, below). One request/response round trip at
+// a time; Cancel aborts the in-flight fetch. `history` mirrors the shape the
+// server expects for /api/claude/help (a plain {role, content} transcript) -
+// content here doesn't need to match the server's own prompt wording exactly,
+// it just needs to carry enough of the same information for a follow-up.
+const CLAUDE_ASSIST_MODES = [
+  { key: 'hint', label: 'Hint' },
+  { key: 'debug', label: 'Debug' },
+  { key: 'explain', label: 'Explain' },
+  { key: 'review', label: 'Review' },
+];
+
+function clip(text, limit) {
+  if (typeof text !== 'string') return '';
+  return text.length > limit ? `${text.slice(0, limit)}\n...[truncated]` : text;
+}
+
+function claudeHistoryEntry(problem, code, lastRun, question, isFirst) {
+  const parts = [];
+  if (isFirst) {
+    parts.push(`Problem: ${problem.title}${problem.difficulty ? ` (${problem.difficulty})` : ''}`);
+    if (problem.prompt) parts.push(clip(problem.prompt, 4000));
+  }
+  parts.push(`Code:\n${clip(code, 8000)}`);
+  if (lastRun) {
+    parts.push(`Run result: exit ${lastRun.exit_code}, timed_out=${Boolean(lastRun.timed_out)}\n` +
+      `stdout: ${clip(lastRun.stdout || '', 3000)}\nstderr: ${clip(lastRun.stderr || '', 3000)}`);
+  }
+  if (question) parts.push(`Question: ${clip(question, 1000)}`);
+  return clip(parts.join('\n\n'), 19500);
+}
+
+/**
+ * options: problem, getCode(), getLastRun(), alwaysDefaultHint (true for review
+ * cards, which always default to Hint instead of Hint-unless-the-run-failed).
+ * Returns { toggleBtn, panel, destroy() }.
+ */
+function claudeAssist({ problem, getCode, getLastRun, alwaysDefaultHint = false }) {
+  let mode = 'hint';
+  let modeDefaulted = false;
+  let history = [];
+  let statusInfo = null;
+  let busy = false;
+  let abortCtrl = null;
+
+  const panelId = `claude-assist-${problem.id}-${Math.random().toString(36).slice(2, 8)}`;
+  const threadEl = h('div', { class: 'claude-thread', role: 'log', 'aria-label': 'Conversation with Claude' });
+
+  const modeInputs = CLAUDE_ASSIST_MODES.map((m) => {
+    const id = `${panelId}-${m.key}`;
+    const input = h('input', {
+      type: 'radio', name: `${panelId}-mode`, id, value: m.key, checked: m.key === mode,
+      onchange: () => { if (input.checked) mode = m.key; },
+    });
+    return h('label', { class: 'claude-mode-choice', for: id }, input, h('span', { text: m.label }));
+  });
+  const modeGroup = h('div', {
+    class: 'claude-mode-group', role: 'radiogroup', 'aria-label': 'Kind of help',
+  }, modeInputs);
+
+  const questionInput = h('textarea', {
+    rows: '2', class: 'claude-question', placeholder: 'Ask something specific (optional)',
+    'aria-label': 'Ask something specific (optional)',
+    onkeydown: (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        ask();
+      }
+    },
+  });
+
+  const askBtn = h('button', { type: 'button', class: 'btn btn-primary btn-sm', onclick: () => ask() }, 'Ask');
+  const cancelBtn = h('button', {
+    type: 'button', class: 'btn btn-sm', hidden: true, onclick: () => { if (abortCtrl) abortCtrl.abort(); },
+  }, 'Cancel');
+  const newConvoBtn = h('button', {
+    type: 'button', class: 'btn btn-sm btn-ghost', onclick: () => {
+      history = [];
+      threadEl.replaceChildren();
+    },
+  }, 'New conversation');
+  const loadingRow = h('p', { class: 'claude-loading', hidden: true, role: 'status' }, 'Asking Claude…');
+  const privacyNote = h('p', { class: 'hint claude-privacy' });
+
+  function paintPrivacy() {
+    const via = statusInfo && statusInfo.mode === 'cli' ? 'the Claude Code CLI' : 'your API key';
+    privacyNote.textContent = statusInfo && statusInfo.mode !== 'off'
+      ? `Sends this problem, your code and its output to Claude via ${via}.`
+      : '';
+  }
+
+  const offNotice = h('div', { class: 'claude-off-notice', hidden: true },
+    h('p', null, 'Ask Claude is turned off. Turn it on in ',
+      h('a', { href: '#/settings' }, 'Settings → Claude help'), ' to use it.'));
+  const form = h('div', { class: 'claude-form' },
+    modeGroup, questionInput,
+    h('div', { class: 'btn-group claude-actions' }, askBtn, cancelBtn, newConvoBtn),
+    loadingRow, privacyNote);
+  const panel = h('div', {
+    class: 'claude-panel', id: panelId, hidden: true, 'aria-label': 'Ask Claude',
+  }, offNotice, threadEl, form);
+
+  function addMessage(role, node) {
+    const row = h('div', { class: `claude-msg claude-msg-${role}` },
+      h('div', { class: 'claude-msg-role', text: role === 'user' ? 'You' : 'Claude' }),
+      h('div', { class: 'claude-msg-body' }, node));
+    threadEl.append(row);
+    return row;
+  }
+
+  async function ensureStatus() {
+    if (!statusInfo) {
+      try {
+        statusInfo = await api('GET', '/api/claude/status');
+      } catch {
+        statusInfo = { mode: 'off' };
+      }
+    }
+    return statusInfo;
+  }
+
+  async function refresh() {
+    const st = await ensureStatus();
+    const off = st.mode === 'off';
+    offNotice.hidden = !off;
+    form.hidden = off;
+    paintPrivacy();
+    if (!modeDefaulted) {
+      modeDefaulted = true;
+      const run = getLastRun();
+      if (!alwaysDefaultHint && run && (run.timed_out || run.exit_code !== 0)) {
+        mode = 'debug';
+        const input = modeGroup.querySelector('input[value="debug"]');
+        if (input) input.checked = true;
+      }
+    }
+  }
+
+  async function ask() {
+    if (busy) return;
+    const st = await ensureStatus();
+    if (st.mode === 'off') {
+      toast('Ask Claude is off. Turn it on in Settings.', { type: 'error' });
+      return;
+    }
+    const question = questionInput.value.trim();
+    const modeLabel = CLAUDE_ASSIST_MODES.find((m) => m.key === mode).label;
+    addMessage('user', document.createTextNode(question ? `${modeLabel}: ${question}` : `${modeLabel} on the code above`));
+    const code = getCode();
+    const lastRun = getLastRun();
+    const isFirst = history.length === 0;
+    busy = true;
+    askBtn.disabled = true;
+    cancelBtn.hidden = false;
+    loadingRow.hidden = false;
+    abortCtrl = new AbortController();
+    try {
+      const body = {
+        problem_id: problem.id, code, mode, question,
+        run: lastRun ? {
+          stdout: lastRun.stdout, stderr: lastRun.stderr,
+          exit_code: lastRun.exit_code, timed_out: Boolean(lastRun.timed_out),
+        } : null,
+        history,
+      };
+      const res = await api('POST', '/api/claude/help', body, { signal: abortCtrl.signal });
+      history = [...history,
+        { role: 'user', content: claudeHistoryEntry(problem, code, lastRun, question, isFirst) },
+        { role: 'assistant', content: clip(res.text, 19500) }];
+      addMessage('assistant', renderMarkdown(res.text));
+    } catch (err) {
+      if (err && err.name === 'AbortError') {
+        threadEl.lastElementChild?.remove(); // drop the user turn we just added; nothing was answered
+      } else {
+        addMessage('assistant', h('p', { class: 'claude-error', text: err.message || String(err) }));
+      }
+    } finally {
+      busy = false;
+      askBtn.disabled = false;
+      cancelBtn.hidden = true;
+      loadingRow.hidden = true;
+      abortCtrl = null;
+    }
+  }
+
+  const toggleBtn = h('button', {
+    type: 'button', class: 'btn btn-sm', 'aria-expanded': 'false', 'aria-controls': panelId,
+    onclick: () => {
+      const show = panel.hidden;
+      panel.hidden = !show;
+      toggleBtn.setAttribute('aria-expanded', String(show));
+      if (show) refresh();
+    },
+  }, icon('spark', 14), 'Ask Claude');
+
+  return {
+    toggleBtn,
+    panel,
+    destroy() {
+      if (abortCtrl) abortCtrl.abort();
+    },
+  };
+}
+
+function starterTemplate(title) {
+  return `# ${title}\nclass Solution:\n    def solve(self):\n        pass\n\n\n# Try it:\n# print(Solution().solve())\n`;
+}
+
+/**
+ * options:
+ *   problem       - the problem this attempt is for (used for the title/template)
+ *   initialCode   - code to load the editor with
+ *   initialLanguage - defaults to 'python'
+ *   ariaLabel     - accessible label for the editor region
+ *   autosaveDraft - if true, changes are saved to the problem's draft ~800ms after
+ *                   typing stops, and flushed immediately when the component is
+ *                   destroyed (leaving the page). This is "your attempt" - the one
+ *                   saving concept for this problem's draft, used both on the
+ *                   problem page (starts from the saved draft) and in review cards'
+ *                   "Code it here" panel (starts blank, but autosaves - replacing
+ *                   the previous draft - as soon as you start typing).
+ *   showSaveAsSolution - if true, shows "Save as my solution" (PATCHes the
+ *                        problem's `solution` field). Problem page only.
+ *
+ * Returns { el, getCode(), getLastRun(), problem, destroy() }.
+ */
+function attemptEditor(options) {
+  const {
+    problem, initialCode = '', initialLanguage = 'python', ariaLabel = 'Code editor',
+    autosaveDraft = false, showSaveAsSolution = false, alwaysDefaultHint = false,
+  } = options;
+  let lastRun = null;
+  let destroyed = false;
+
+  // ---------- editor
+  const editorHost = h('div', { class: 'attempt-editor-wrap' });
+  const editor = createEditor({
+    parent: editorHost,
+    doc: initialCode,
+    ariaLabel,
+    onRun: () => run(),
+    onChange: () => {
+      if (autosaveDraft) scheduleSave();
+    },
+  });
+
+  // ---------- save status (autosave mode only)
+  const saveStatus = h('span', { class: 'attempt-save-status', 'aria-live': 'polite' });
+  let saveTimer = null;
+  let saveInFlight = null;
+  let dirty = false;
+  function scheduleSave() {
+    dirty = true;
+    saveStatus.textContent = '';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushSave, 800);
+  }
+  async function flushSave() {
+    clearTimeout(saveTimer);
+    if (!dirty || destroyed) return;
+    dirty = false;
+    saveStatus.textContent = 'Saving…';
+    saveStatus.classList.remove('is-error');
+    const code = editor.getValue();
+    try {
+      saveInFlight = api('PUT', `/api/problems/${problem.id}/draft`, { code, language: initialLanguage });
+      await saveInFlight;
+      if (!destroyed) saveStatus.textContent = 'Saved';
+    } catch (err) {
+      if (!destroyed) {
+        saveStatus.textContent = "Couldn't save";
+        saveStatus.classList.add('is-error');
+      }
+    }
+  }
+  const onBeforeUnload = () => {
+    // Best-effort: fires on tab close/refresh; a debounced save may still be pending.
+    if (dirty) {
+      try {
+        navigator.sendBeacon(`/api/problems/${problem.id}/draft`,
+          new Blob([JSON.stringify({ code: editor.getValue(), language: initialLanguage })],
+            { type: 'application/json' }));
+      } catch { /* best effort only */ }
+    }
+  };
+  if (autosaveDraft) window.addEventListener('beforeunload', onBeforeUnload);
+
+  // ---------- stdin (collapsible, toggled from the More menu)
+  const stdinArea = h('textarea', { rows: '3', 'aria-label': 'Standard input for the run' });
+  const stdinPanel = h('div', { class: 'attempt-stdin', hidden: true },
+    h('label', { class: 'block-label', text: 'Input (stdin)' }), stdinArea);
+  function toggleStdin() {
+    const show = stdinPanel.hidden;
+    stdinPanel.hidden = !show;
+    if (show) stdinArea.focus();
+  }
+
+  // ---------- output (hidden until the first run)
+  const summaryEl = h('span', { class: 'attempt-summary' });
+  const badgeEl = h('span', { hidden: true });
+  const outHead = h('div', { class: 'attempt-output-head', role: 'status', 'aria-live': 'polite' },
+    badgeEl, summaryEl);
+  const stdoutEl = h('pre', { class: 'attempt-stream' });
+  const stderrEl = h('pre', { class: 'attempt-stream is-stderr', hidden: true });
+  const outputPanel = h('div', { class: 'attempt-output', hidden: true }, outHead, stdoutEl, stderrEl);
+  const preRunHint = h('p', {
+    class: 'attempt-hint',
+    text: 'Run your code with Ctrl+Enter. Print results to see them here.',
+  });
+
+  function badge(text, kind) {
+    badgeEl.hidden = false;
+    badgeEl.className = `attempt-badge is-${kind}`;
+    badgeEl.textContent = text;
+  }
+
+  async function run() {
+    if (runBtn.disabled || destroyed) return;
+    preRunHint.hidden = true;
+    outputPanel.hidden = false;
+    runBtn.disabled = true;
+    runBtn.textContent = 'Running…';
+    summaryEl.textContent = 'Running your code…';
+    badgeEl.hidden = true;
+    try {
+      const result = await api('POST', '/api/run', { code: editor.getValue(), stdin: stdinArea.value });
+      if (destroyed) return;
+      lastRun = result;
+      stdoutEl.textContent = result.stdout || 'No output.';
+      stdoutEl.classList.toggle('is-empty', !result.stdout);
+      stderrEl.textContent = result.stderr;
+      stderrEl.hidden = !result.stderr;
+      if (result.timed_out) {
+        badge('Timed out', 'timeout');
+        summaryEl.textContent = `Timed out after ${(result.duration_ms / 1000).toFixed(1)}s.`;
+      } else if (result.exit_code === 0) {
+        badge('Exit 0', 'ok');
+        summaryEl.textContent = `Ran successfully in ${result.duration_ms}ms.`;
+      } else {
+        badge(`Exit ${result.exit_code}`, 'error');
+        summaryEl.textContent = `Exited with code ${result.exit_code} after ${result.duration_ms}ms.`;
+      }
+      if (result.truncated) summaryEl.textContent += ' Output was truncated.';
+    } catch (err) {
+      if (destroyed) return;
+      lastRun = null;
+      badge('Error', 'error');
+      summaryEl.textContent = err.message;
+      toastError(err);
+    } finally {
+      if (!destroyed) {
+        runBtn.disabled = false;
+        runBtn.textContent = 'Run';
+      }
+    }
+  }
+
+  // ---------- toolbar: Run + Ask Claude on the left; save status + More on the right
+  const runBtn = h('button', {
+    type: 'button', class: 'btn btn-primary btn-sm', 'aria-keyshortcuts': 'Control+Enter',
+    title: 'Run (Ctrl+Enter)', onclick: () => run(),
+  }, icon('play', 14), 'Run');
+
+  // ---------- Ask Claude (see claudeAssist() above)
+  const assist = claudeAssist({
+    problem, getCode: () => editor.getValue(), getLastRun: () => lastRun,
+    alwaysDefaultHint, // review cards ("Code it here") always default to Hint
+  });
+
+  const more = menuButton({
+    label: 'More',
+    items: () => [
+      {
+        label: stdinPanel.hidden ? 'Input (stdin)' : 'Hide input (stdin)',
+        onClick: toggleStdin,
+      },
+      {
+        label: 'Copy code',
+        onClick: async () => {
+          try {
+            await navigator.clipboard.writeText(editor.getValue());
+            toast('Code copied', { duration: 1800 });
+          } catch {
+            toast("Couldn't copy automatically. Select the code and press Ctrl+C.", { type: 'error' });
+          }
+        },
+      },
+      {
+        label: 'Reset to template',
+        onClick: async () => {
+          const ok = await confirmDialog({
+            title: 'Reset to template?',
+            body: 'Your current code in this editor will be replaced with the starter template. This can’t be undone.',
+            confirmLabel: 'Reset',
+          });
+          if (!ok || destroyed) return;
+          editor.setValue(starterTemplate(problem.title));
+          if (autosaveDraft) scheduleSave();
+        },
+      },
+      {
+        label: 'Save as my solution',
+        hidden: !showSaveAsSolution,
+        onClick: async () => {
+          if (problem.solution && problem.solution.trim()) {
+            const ok = await confirmDialog({
+              title: 'Replace your saved solution?',
+              body: 'This overwrites the Solution saved on this problem with the code currently in the editor.',
+              confirmLabel: 'Save as my solution',
+            });
+            if (!ok) return;
+          }
+          try {
+            const updated = await api('PATCH', `/api/problems/${problem.id}`, { solution: editor.getValue() });
+            problem.solution = updated.solution;
+            toast('Saved as your solution', { type: 'success' });
+          } catch (err) {
+            toastError(err);
+          }
+        },
+      },
+    ],
+  });
+
+  const toolbar = h('div', { class: 'attempt-toolbar' },
+    runBtn, h('span', { class: 'attempt-assist' }, assist.toggleBtn),
+    h('span', { class: 'spacer' }),
+    autosaveDraft ? saveStatus : null,
+    more.el);
+
+  const el = h('div', { class: 'attempt' }, toolbar, editorHost, stdinPanel, preRunHint, outputPanel, assist.panel);
+
+  return {
+    el,
+    problem,
+    getCode: () => editor.getValue(),
+    getLastRun: () => lastRun,
+    destroy() {
+      if (destroyed) return;
+      destroyed = true;
+      clearTimeout(saveTimer);
+      if (autosaveDraft) {
+        window.removeEventListener('beforeunload', onBeforeUnload);
+        if (dirty) flushSave(); // best effort; not awaited, the page is already navigating away
+      }
+      assist.destroy();
+      editor.destroy();
+    },
+  };
 }
 
 function notesContent(p) {
@@ -611,6 +1278,52 @@ function createReviewCard(p, { mode, onRated, onSkip, onClose }) {
     notesBtn.textContent = show ? 'Hide my notes' : 'Show my notes';
   }
 
+  // ---------- code it here (collapsed by default; state remembered across cards)
+  const CODE_PANEL_KEY = 'dsa-review:code-it-here-open';
+  let codeAttempt = null;
+  const codePanelId = `code-${p.id}-${Math.random().toString(36).slice(2, 8)}`;
+  const codePanel = h('div', { class: 'rc-code-panel', id: codePanelId, hidden: true });
+  const codeBtn = h('button', {
+    type: 'button', class: 'btn rc-code-toggle', 'aria-expanded': 'false', 'aria-controls': codePanelId,
+    onclick: () => toggleCode(),
+  }, 'Code it here');
+  function rememberCodeOpen(open) {
+    try { localStorage.setItem(CODE_PANEL_KEY, open ? '1' : '0'); } catch { /* private mode, etc. */ }
+  }
+  function readRememberedCodeOpen() {
+    try { return localStorage.getItem(CODE_PANEL_KEY) === '1'; } catch { return false; }
+  }
+  function mountCodeAttempt() {
+    if (codeAttempt || destroyed) return;
+    // Deliberately starts blank (never the saved draft, which would spoil a recode
+    // attempt), but autosaves to that same draft - "your attempt" for this problem -
+    // as soon as you start typing, same as the problem page's editor.
+    codeAttempt = attemptEditor({
+      problem: p,
+      initialCode: starterTemplate(p.title),
+      initialLanguage: p.language || 'python',
+      ariaLabel: `Recode ${p.title} here`,
+      autosaveDraft: true,
+      alwaysDefaultHint: true,
+    });
+    codePanel.append(codeAttempt.el);
+  }
+  function toggleCode() {
+    if (destroyed) return;
+    const show = codePanel.hidden;
+    codePanel.hidden = !show;
+    codeBtn.setAttribute('aria-expanded', String(show));
+    codeBtn.textContent = show ? 'Hide code editor' : 'Code it here';
+    rememberCodeOpen(show);
+    if (show) mountCodeAttempt();
+  }
+  if (readRememberedCodeOpen()) {
+    codePanel.hidden = false;
+    codeBtn.setAttribute('aria-expanded', 'true');
+    codeBtn.textContent = 'Hide code editor';
+    mountCodeAttempt();
+  }
+
   // ---------- rating
   const rateButtons = RATINGS.map((r) => {
     const interval = p.preview && p.preview[r.key] ? p.preview[r.key].interval_days : null;
@@ -670,7 +1383,8 @@ function createReviewCard(p, { mode, onRated, onSkip, onClose }) {
 
   const el = h('article', { class: 'card review-card', 'aria-label': `Review: ${p.title}` },
     head,
-    h('div', { class: 'rc-body' }, prompt, instruction, timerBox, notesBtn, notesPanel, rateSection),
+    h('div', { class: 'rc-body' },
+      prompt, instruction, timerBox, notesBtn, notesPanel, codeBtn, codePanel, rateSection),
     foot);
 
   return {
@@ -684,6 +1398,7 @@ function createReviewCard(p, { mode, onRated, onSkip, onClose }) {
     destroy() {
       destroyed = true;
       clearInterval(tick);
+      if (codeAttempt) codeAttempt.destroy();
     },
   };
 }
@@ -730,12 +1445,14 @@ async function undoReview(pid, context, reviewId) {
   try {
     const p = await api('POST', `/api/problems/${pid}/undo`, reviewId === undefined ? {} : { review_id: reviewId });
     toast(`Review undone for “${p.title}”`);
-    if (context === 'session' && state.session) {
-      const s = state.session;
+    // The session that's on screen may be either deck's (with the "show NeetCode on
+    // main Today" setting on, a NeetCode problem can be in the main session).
+    const s = state.today ? state.sessions[state.today.deck] : null;
+    if (context === 'session' && s) {
       s.order = [pid, ...s.order.filter((x) => x !== pid)];
       s.done = Math.max(0, s.done - 1);
     }
-    await refreshSummary();
+    await refreshSummaries();
     if (state.today) {
       await syncQueue(state.today);
       renderToday(state.today, { focusCard: true });
@@ -749,50 +1466,85 @@ async function undoReview(pid, context, reviewId) {
   }
 }
 
-// ================================================================ Today view
-async function viewToday(main, { seq }) {
+// ================================================================ Today / NeetCode review view
+// Both #/today (deck 'main') and #/neetcode/review (deck 'neetcode') are the same view,
+// parameterized by deck: separate summary, session, tag filter and API scope per deck.
+const DECK_LABEL = { main: 'Today', neetcode: 'NeetCode review' };
+
+async function viewToday(main, { seq, deck = 'main' }) {
+  const ncNudgeEl = h('div', null);
   const statsEl = h('section', { class: 'stats is-loading', 'aria-label': 'Your progress' });
   renderStats(statsEl, null, null);
   const sessionEl = h('section', { class: 'session', 'aria-labelledby': 'session-title' }, loadingEl('Loading your queue'));
   const forecastEl = h('section', { class: 'card forecast', 'aria-labelledby': 'forecast-title' });
+  const sub = deck === 'neetcode'
+    ? 'Review session for your NeetCode 150 deck.'
+    : studyNow().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
   main.append(
-    pageHead('Today', studyNow().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })),
+    pageHead(DECK_LABEL[deck], sub),
+    deck === 'main' ? ncNudgeEl : null,
     statsEl, sessionEl, forecastEl,
   );
   forecastEl.hidden = true;
 
-  const ctrl = { seq, statsEl, sessionEl, forecastEl, queue: null, card: null, syncToken: 0, cardToken: 0 };
+  const ctrl = { seq, deck, statsEl, sessionEl, forecastEl, queue: null, card: null, syncToken: 0, cardToken: 0 };
   state.today = ctrl;
   onCleanup(() => {
     if (ctrl.card) ctrl.card.destroy();
     if (state.today === ctrl) state.today = null;
   });
 
-  const [, tags] = await Promise.all([refreshSummary(), loadTags()]);
+  const [mainSummary, tags] = await Promise.all([refreshSummary(deck), loadTags()]);
   if (!isCurrent(seq)) return;
-  if (state.todayTag && !tags.some((t) => t.tag === state.todayTag)) state.todayTag = '';
+  if (state.todayTags[deck] && !tags.some((t) => t.tag === state.todayTags[deck])) state.todayTags[deck] = '';
   await syncQueue(ctrl);
   if (!isCurrent(seq)) return;
   renderToday(ctrl);
+
+  // When NeetCode problems aren't already folded into this Today session, nudge
+  // toward them separately if there's anything waiting there.
+  if (deck === 'main' && !mainSummary.settings.neetcode_in_main) {
+    refreshSummary('neetcode').then((ncSummary) => {
+      if (!isCurrent(seq)) return;
+      renderNeetcodeNudge(ncNudgeEl, ncSummary);
+    }).catch(() => {});
+  }
+}
+
+function renderNeetcodeNudge(el, ncSummary) {
+  const c = ncSummary.counts;
+  if (c.due === 0 && c.new === 0) {
+    el.replaceChildren();
+    return;
+  }
+  const parts = [];
+  if (c.due) parts.push(`${c.due} due`);
+  if (c.new) parts.push(`${c.new} new`);
+  el.replaceChildren(h('div', { class: 'card nc-nudge' },
+    h('span', { class: 'nc-nudge-text' }, h('strong', { text: 'NeetCode: ' }), parts.join(' · ')),
+    h('a', { class: 'btn btn-primary btn-sm', href: '#/neetcode/review' }, 'Start NeetCode review')));
 }
 
 /** Fetch the queue (and optionally the summary) and merge it into the in-memory session. */
 async function syncQueue(ctrl, { withSummary = false } = {}) {
   const token = ++ctrl.syncToken;
-  const tag = state.todayTag;
+  const tag = state.todayTags[ctrl.deck];
+  const qs = new URLSearchParams({ deck: ctrl.deck });
+  if (tag) qs.set('tag', tag);
   const [queue] = await Promise.all([
-    api('GET', `/api/queue${tag ? `?tag=${encodeURIComponent(tag)}` : ''}`),
-    withSummary ? refreshSummary() : null,
+    api('GET', `/api/queue?${qs}`),
+    withSummary ? refreshSummary(ctrl.deck) : null,
   ]);
   if (token !== ctrl.syncToken) return false;
   ctrl.queue = queue;
   const items = [...queue.due, ...queue.new];
   const ids = new Set(items.map((p) => p.id));
-  const key = `${tag}|${state.summary ? state.summary.day_start : ''}`;
-  let s = state.session;
+  const summary = state.summaries[ctrl.deck];
+  const key = `${tag}|${summary ? summary.day_start : ''}`;
+  let s = state.sessions[ctrl.deck];
   if (!s || s.key !== key) {
     s = { key, tag, order: [], done: 0 };
-    state.session = s;
+    state.sessions[ctrl.deck] = s;
   }
   s.order = s.order.filter((id) => ids.has(id));
   for (const p of items) if (!s.order.includes(p.id)) s.order.push(p.id);
@@ -801,10 +1553,11 @@ async function syncQueue(ctrl, { withSummary = false } = {}) {
 
 function renderToday(ctrl, { focusCard = false } = {}) {
   if (!isCurrent(ctrl.seq)) return;
-  ctrl.statsEl.hidden = state.summary.counts.total === 0;
-  renderStats(ctrl.statsEl, state.summary, ctrl.queue);
+  const summary = state.summaries[ctrl.deck];
+  ctrl.statsEl.hidden = summary.counts.total === 0;
+  renderStats(ctrl.statsEl, summary, ctrl.queue);
   renderSession(ctrl, { focusCard });
-  renderForecast(ctrl.forecastEl, state.summary);
+  renderForecast(ctrl.forecastEl, summary);
 }
 
 function renderStats(el, summary, queue) {
@@ -836,8 +1589,8 @@ function renderStats(el, summary, queue) {
 
 function renderSession(ctrl, { focusCard = false } = {}) {
   const el = ctrl.sessionEl;
-  const s = state.session;
-  const summary = state.summary;
+  const s = state.sessions[ctrl.deck];
+  const summary = state.summaries[ctrl.deck];
   if (ctrl.card) {
     ctrl.card.destroy();
     ctrl.card = null;
@@ -845,7 +1598,7 @@ function renderSession(ctrl, { focusCard = false } = {}) {
   state.activeReview = null;
 
   if (summary.counts.total === 0) {
-    el.replaceChildren(welcomeState());
+    el.replaceChildren(welcomeState(ctrl.deck));
     return;
   }
 
@@ -884,9 +1637,9 @@ function tagFilter(ctrl) {
   const select = h('select', { id: 'today-tag', class: 'compact' },
     h('option', { value: '' }, 'All tags'),
     state.tags.map((t) => h('option', { value: t.tag }, `${t.tag} (${t.count})`)));
-  select.value = state.todayTag;
+  select.value = state.todayTags[ctrl.deck];
   select.addEventListener('change', async () => {
-    state.todayTag = select.value;
+    state.todayTags[ctrl.deck] = select.value;
     ctrl.sessionEl.setAttribute('aria-busy', 'true');
     try {
       if (await syncQueue(ctrl)) renderToday(ctrl);
@@ -902,7 +1655,7 @@ function tagFilter(ctrl) {
 }
 
 async function showCurrent(ctrl, holder, focusCard) {
-  const s = state.session;
+  const s = state.sessions[ctrl.deck];
   const id = s.order[0];
   const token = ++ctrl.cardToken;
   let p;
@@ -953,10 +1706,11 @@ async function showCurrent(ctrl, holder, focusCard) {
 }
 
 function caughtUpState(ctrl) {
-  const summary = state.summary;
+  const summary = state.summaries[ctrl.deck];
   const q = ctrl.queue;
-  const tag = state.todayTag;
-  const s = state.session;
+  const tag = state.todayTags[ctrl.deck];
+  const s = state.sessions[ctrl.deck];
+  const isNc = ctrl.deck === 'neetcode';
   const f = summary.forecast;
   const nextIdx = f.findIndex((d, i) => i > 0 && d.count > 0);
   let nextText;
@@ -982,8 +1736,16 @@ function caughtUpState(ctrl) {
       : 'Nothing is due right now. Your schedule is up to date.');
   }
   if (q.new_waiting > 0 && q.new_left_today === 0) {
-    lines.push(`${plural(q.new_waiting, 'new problem')} ${q.new_waiting === 1 ? 'is' : 'are'} waiting, but today’s limit of ${summary.settings.new_per_day} is used up. You can raise it in Settings.`);
+    const limit = isNc ? summary.settings.neetcode_new_per_day : summary.settings.new_per_day;
+    lines.push(`${plural(q.new_waiting, 'new problem')} ${q.new_waiting === 1 ? 'is' : 'are'} waiting, but today’s limit of ${limit} is used up. You can raise it in Settings.`);
   }
+
+  const addLink = isNc
+    ? h('a', { class: `btn${tag ? '' : ' btn-primary'}`, href: '#/neetcode' }, icon('plus'), 'Pick a new problem')
+    : h('a', { class: `btn${tag ? '' : ' btn-primary'}`, href: '#/add' }, icon('plus'), 'Add a problem');
+  const browseLink = isNc
+    ? null
+    : h('a', { class: 'btn', href: '#/library' }, 'Browse library');
 
   return h('div', { class: 'card empty' },
     h('div', { class: 'empty-icon', 'aria-hidden': 'true' }, icon('done', 28)),
@@ -996,7 +1758,7 @@ function caughtUpState(ctrl) {
           type: 'button',
           class: 'btn btn-primary',
           onclick: async () => {
-            state.todayTag = '';
+            state.todayTags[ctrl.deck] = '';
             try {
               if (await syncQueue(ctrl)) renderToday(ctrl);
             } catch (err) {
@@ -1005,11 +1767,17 @@ function caughtUpState(ctrl) {
           },
         }, 'Show all tags')
         : null,
-      h('a', { class: `btn${tag ? '' : ' btn-primary'}`, href: '#/add' }, icon('plus'), 'Add a problem'),
-      h('a', { class: 'btn', href: '#/library' }, 'Browse library')));
+      addLink, browseLink));
 }
 
-function welcomeState() {
+function welcomeState(deck = 'main') {
+  if (deck === 'neetcode') {
+    return h('div', { class: 'card welcome' },
+      h('h2', { text: 'Your NeetCode 150 deck is empty' }),
+      h('p', { text: 'Add problems from the NeetCode 150 roadmap (or move some over from your main library) to start a review schedule just for them.' }),
+      h('div', { class: 'btn-group' },
+        h('a', { class: 'btn btn-primary btn-lg', href: '#/neetcode' }, icon('plus'), 'Browse NeetCode 150')));
+  }
   const step = (title, text) => h('li', null, h('strong', { text: title }), h('span', { text }));
   return h('div', { class: 'card welcome' },
     h('h2', { text: 'Welcome to DSA Review' }),
@@ -1142,6 +1910,22 @@ function forecastChart(forecast, total) {
 let formSeq = 0;
 const SERVER_FIELD_ALIASES = { first_rating: 'rating', duration_ms: 'duration' };
 
+// Lazily fetched once and cached, for the Add/Edit form's "recognize a NeetCode 150 URL"
+// autofill (and reusable by anything else that just needs the flat problem list).
+let neetcodeTrackerPromise = null;
+function fetchNeetcodeProblems() {
+  if (!neetcodeTrackerPromise) {
+    neetcodeTrackerPromise = api('GET', '/api/neetcode').catch((err) => {
+      neetcodeTrackerPromise = null;
+      throw err;
+    });
+  }
+  return neetcodeTrackerPromise.then((t) => t.problems);
+}
+function titleCaseSlug(slug) {
+  return slug.split('-').filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+}
+
 function problemForm({ initial = {}, tags = [], withRating = false, submitText = 'Save', anotherText, onSubmit, onCancel }) {
   const uid = `pf${++formSeq}`;
   const fid = (name) => `${uid}-${name}`;
@@ -1164,6 +1948,10 @@ function problemForm({ initial = {}, tags = [], withRating = false, submitText =
 
   const val = (k, fallback = '') => (initial[k] === undefined || initial[k] === null ? fallback : initial[k]);
   const title = h('input', { type: 'text', maxlength: '200', autocomplete: 'off', required: true, value: val('title') });
+  const deck = h('select', null,
+    h('option', { value: 'main' }, 'Main'),
+    h('option', { value: 'neetcode' }, 'NeetCode'));
+  deck.value = val('deck', 'main');
   const url = h('input', { type: 'url', maxlength: '2000', inputmode: 'url', autocomplete: 'off', placeholder: 'https://leetcode.com/problems/two-sum/', value: val('url') });
   const sourceList = h('datalist', { id: fid('sources') }, SOURCES.map((s) => h('option', { value: s })));
   const source = h('input', { type: 'text', maxlength: '100', list: sourceList.id, autocomplete: 'off', placeholder: 'LeetCode', value: val('source') });
@@ -1262,6 +2050,62 @@ function problemForm({ initial = {}, tags = [], withRating = false, submitText =
     return input && input.value ? Number(input.value) : null;
   }
 
+  // ---------- "More details": Deck, Source, Prompt, Notes, Solution, Language.
+  // Closed by default on Add; auto-opened when any of these already has a value
+  // (editing an existing problem, or a NeetCode prefill).
+  const moreHasValue = val('deck', 'main') !== 'main' || Boolean(val('source')) || Boolean(val('prompt'))
+    || Boolean(val('notes')) || Boolean(val('solution')) || val('language', 'python') !== 'python';
+  const moreDetails = h('details', { class: 'more-details', open: moreHasValue },
+    h('summary', { class: 'section-summary' }, 'More details'),
+    h('div', { class: 'details-body stack' },
+      field('deck', 'Deck', deck, {
+        hint: 'Which review deck this problem belongs to. NeetCode problems get their own review session.',
+      }),
+      h('div', null, field('source', 'Source', source, { optional: true }), sourceList),
+      field('prompt', 'Prompt', prompt, { hint: 'Enough detail that you could solve it again without the original page.' }),
+      field('notes', 'Notes', notes, { optional: true }),
+      field('solution', 'Solution', solution, {
+        optional: true,
+        hint: 'Tab inserts 4 spaces. To leave the field with the keyboard, press Esc and then Tab.',
+      }),
+      h('div', null, field('language', 'Language', language), langList)));
+
+  // ---------- autofill from a pasted LeetCode link (never overwrites a field already typed in)
+  const urlAutofillNote = h('p', { class: 'hint', hidden: true });
+  const onUrlInput = debounce(async () => {
+    const m = /leetcode\.com\/problems\/([a-z0-9-]+)/i.exec(url.value);
+    if (!m) {
+      urlAutofillNote.hidden = true;
+      return;
+    }
+    const slug = m[1].toLowerCase();
+    if (!title.value.trim()) title.value = titleCaseSlug(slug);
+    let matched = null;
+    try {
+      const problems = await fetchNeetcodeProblems();
+      matched = problems.find((p) => p.slug === slug) || null;
+    } catch {
+      matched = null;
+    }
+    if (!matched) {
+      urlAutofillNote.hidden = true;
+      return;
+    }
+    if (!title.value.trim()) title.value = matched.title;
+    if (!difficulty.value) difficulty.value = matched.difficulty;
+    if (!tagsInput.value.trim()) {
+      const tagList = [slugTag(matched.category), 'neetcode-150'];
+      if (matched.blind75) tagList.push('blind-75');
+      tagsInput.value = tagList.join(', ');
+      syncChips();
+    }
+    if (deck.value === 'main') deck.value = 'neetcode';
+    moreDetails.open = true;
+    urlAutofillNote.hidden = false;
+    urlAutofillNote.textContent = `Recognized NeetCode 150 #${matched.id} — added to your NeetCode deck. Change under More details.`;
+  }, 300);
+  url.addEventListener('input', onUrlInput);
+
   const formError = h('div', { class: 'form-error', role: 'alert', hidden: true });
   const submitBtn = h('button', { type: 'submit', class: 'btn btn-primary btn-lg' }, submitText);
   const anotherBtn = anotherText ? h('button', { type: 'button', class: 'btn btn-lg', onclick: () => submit(true) }, anotherText) : null;
@@ -1270,23 +2114,16 @@ function problemForm({ initial = {}, tags = [], withRating = false, submitText =
   const form = h('form', { class: 'form', novalidate: true, 'aria-label': withRating ? 'Add a problem' : 'Edit problem' },
     formError,
     field('title', 'Title', title, { required: true }),
-    h('div', { class: 'form-grid-3' },
-      field('url', 'Link', url, { optional: true }),
-      h('div', null, field('source', 'Source', source, { optional: true }), sourceList),
+    h('div', { class: 'form-grid' },
+      field('url', 'Link', url, { optional: true, extra: urlAutofillNote }),
       field('difficulty', 'Difficulty', difficulty)),
     field('tags', 'Tags', tagsInput, {
       hint: 'Separate with commas. Click a tag below to add or remove it.',
       extra: chipBox,
     }),
-    field('prompt', 'Prompt', prompt, { hint: 'Enough detail that you could solve it again without the original page.' }),
     field('insight', 'Key insight', insight, { hint: 'The one idea that unlocks the problem.' }),
-    field('notes', 'Notes', notes, { optional: true }),
-    field('solution', 'Solution', solution, {
-      optional: true,
-      hint: 'Tab inserts 4 spaces. To leave the field with the keyboard, press Esc and then Tab.',
-    }),
-    h('div', { class: 'form-grid' }, h('div', null, field('language', 'Language', language), langList)),
     withRating ? [h('hr', { class: 'divider' }), ratingGroup, durationWrap] : null,
+    moreDetails,
     h('div', { class: 'form-actions' }, submitBtn, anotherBtn, cancelBtn));
 
   form.addEventListener('submit', (e) => {
@@ -1330,6 +2167,7 @@ function problemForm({ initial = {}, tags = [], withRating = false, submitText =
       url: url.value.trim(),
       source: source.value.trim(),
       difficulty: difficulty.value,
+      deck: deck.value,
       tags: parseTagList(tagsInput.value),
       prompt: prompt.value,
       insight: insight.value.trim(),
@@ -1393,7 +2231,10 @@ function problemForm({ initial = {}, tags = [], withRating = false, submitText =
     clearErrors();
     for (const input of [title, url, source, tagsInput, prompt, insight, notes, solution]) input.value = '';
     difficulty.value = '';
+    deck.value = 'main';
     language.value = 'python';
+    moreDetails.open = false;
+    urlAutofillNote.hidden = true;
     if (withRating) {
       ratingGroup.querySelector(`input[name="${ratingName}"][value=""]`).checked = true;
       duration.value = '';
@@ -1412,8 +2253,38 @@ function problemForm({ initial = {}, tags = [], withRating = false, submitText =
 }
 
 // ================================================================ Add view
-async function viewAdd(main, { seq }) {
+async function viewAdd(main, { seq, params }) {
+  const ncSlug = new URLSearchParams(params && params[0] ? params[0] : '').get('nc');
+  let ncProblem = null;
+  if (ncSlug) {
+    try {
+      const tracker = await api('GET', '/api/neetcode');
+      ncProblem = tracker.problems.find((p) => p.slug === ncSlug) || null;
+    } catch (err) {
+      toastError(err);
+    }
+    if (!isCurrent(seq)) return;
+  }
+
   main.append(pageHead('Add a problem', 'Save a problem you want to keep sharp. Include enough of the prompt to solve it again cold.'));
+
+  if (ncSlug) {
+    if (ncProblem) {
+      const already = ncProblem.status !== 'not_started';
+      main.append(h('div', { class: 'card nc-add-note' },
+        h('a', { class: 'back-link', href: '#/neetcode' }, icon('back'), 'NeetCode 150'),
+        h('p', null,
+          h('strong', { text: `NeetCode 150 #${ncProblem.id}` }), ` · ${ncProblem.category}`,
+          already
+            ? [' — already in your library (', h('a', { href: `#/problem/${ncProblem.problem.id}`, text: 'open it' }), '). Saving again adds a second entry.']
+            : '.')));
+    } else {
+      main.append(h('div', { class: 'card nc-add-note' },
+        h('a', { class: 'back-link', href: '#/neetcode' }, icon('back'), 'NeetCode 150'),
+        h('p', { text: `Couldn't find that NeetCode 150 problem (“${ncSlug}”). Fill in the form below instead.` })));
+    }
+  }
+
   const holder = h('div', { class: 'card' }, loadingEl());
   main.append(holder);
   let tags = [];
@@ -1424,7 +2295,18 @@ async function viewAdd(main, { seq }) {
   }
   if (!isCurrent(seq)) return;
 
+  const initial = { deck: ncSlug ? 'neetcode' : 'main' };
+  if (ncProblem) {
+    initial.title = ncProblem.title;
+    initial.url = ncProblem.leetcode_url;
+    initial.source = 'NeetCode';
+    initial.difficulty = ncProblem.difficulty;
+    initial.tags = [slugTag(ncProblem.category), 'neetcode-150'];
+    if (ncProblem.blind75) initial.tags.push('blind-75');
+  }
+
   const form = problemForm({
+    initial,
     tags,
     withRating: true,
     submitText: 'Save',
@@ -1435,7 +2317,7 @@ async function viewAdd(main, { seq }) {
         ? 'it’s in your new queue'
         : `next review ${nextReviewPhrase(p.due)} (${fmtDate(p.due)})`;
       toast(`Added “${p.title}” — ${when}.`, { type: 'success' });
-      refreshSummary().catch(() => {});
+      refreshSummaries();
       if (!isCurrent(seq)) return;
       if (another) {
         form.reset();
@@ -1449,6 +2331,360 @@ async function viewAdd(main, { seq }) {
   });
   holder.replaceChildren(form.el);
   form.focusTitle();
+}
+
+// ================================================================ NeetCode 150 view
+const NC_STATUS_LABEL = { not_started: 'Not started', added: 'Added', solved: 'Solved', mastered: 'Mastered' };
+const NC_FILTERS_KEY = 'dsa-review:neetcode-filters';
+
+function getNcFilters() {
+  if (!state.neetcodeFilters) {
+    let saved = null;
+    try {
+      const raw = sessionStorage.getItem(NC_FILTERS_KEY);
+      if (raw) saved = JSON.parse(raw);
+    } catch {
+      saved = null;
+    }
+    state.neetcodeFilters = Object.assign({ q: '', difficulty: '', status: '', blind75: false }, saved || {});
+  }
+  return state.neetcodeFilters;
+}
+
+function saveNcFilters(f) {
+  try {
+    sessionStorage.setItem(NC_FILTERS_KEY, JSON.stringify(f));
+  } catch {
+    /* ignore: sessionStorage unavailable (private browsing, etc.) */
+  }
+}
+
+function ncStatusPill(status) {
+  return h('span', { class: `pill pill-nc-${status}`, text: NC_STATUS_LABEL[status] || status });
+}
+
+function miniBar(fraction) {
+  const fill = h('div', { class: 'nc-progress-fill' });
+  fill.style.width = `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}%`;
+  return h('div', { class: 'nc-progress-track' }, fill);
+}
+
+function ncMatchesFilters(p, f) {
+  if (f.q && !p.title.toLowerCase().includes(f.q)) return false;
+  if (f.difficulty && p.difficulty !== f.difficulty) return false;
+  if (f.blind75 && !p.blind75) return false;
+  if (f.status === 'not_solved') {
+    if (p.status !== 'not_started' && p.status !== 'added') return false;
+  } else if (f.status && p.status !== f.status) return false;
+  return true;
+}
+
+function ncNextText(lp) {
+  if (lp.suspended) return 'Suspended';
+  if (lp.status === 'new') return 'In your new queue';
+  if (lp.status === 'due') return lp.overdue_days ? `Due · ${plural(lp.overdue_days, 'day')} overdue` : 'Due today';
+  return `Next review ${nextReviewPhrase(lp.due)}`;
+}
+
+function ncRowEl(p) {
+  const notStarted = p.status === 'not_started';
+  return h('li', { class: `nc-row nc-row-${p.status}` },
+    h('div', { class: 'nc-row-main' },
+      h('span', { class: 'muted nc-row-num', text: `#${p.id}` }),
+      h('a', { class: 'nc-row-title', href: p.leetcode_url, target: '_blank', rel: 'noopener noreferrer' },
+        p.title, icon('external', 14), srOnly(' (opens in a new tab)')),
+      diffBadge(p.difficulty, { showEmpty: true }),
+      p.blind75 ? h('span', { class: 'chip', text: 'Blind 75' }) : null),
+    h('div', { class: 'nc-row-side' },
+      notStarted ? null : ncStatusPill(p.status),
+      p.problem ? h('span', { class: 'muted small nc-row-next', text: ncNextText(p.problem) }) : null,
+      p.video_url ? h('a', { class: 'btn btn-ghost btn-sm', href: p.video_url, target: '_blank', rel: 'noopener noreferrer' }, 'Video', srOnly(' (opens in a new tab)')) : null,
+      p.solution_url ? h('a', { class: 'nc-row-solution', href: p.solution_url, target: '_blank', rel: 'noopener noreferrer' }, 'Solution', srOnly(' (opens in a new tab)')) : null,
+      notStarted
+        ? h('a', { class: 'btn btn-sm btn-primary', href: `#/add?nc=${encodeURIComponent(p.slug)}` }, icon('plus'), 'Add')
+        : h('a', { class: 'btn btn-sm', href: `#/problem/${p.problem.id}` }, 'Open')));
+}
+
+// Category sections remember open/closed per category across visits.
+const NC_CAT_OPEN_KEY = 'dsa-review:neetcode-cat-open';
+function loadCatOpenState() {
+  try {
+    return JSON.parse(localStorage.getItem(NC_CAT_OPEN_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+function saveCatOpen(name, open) {
+  try {
+    const st = loadCatOpenState();
+    st[name] = open;
+    localStorage.setItem(NC_CAT_OPEN_KEY, JSON.stringify(st));
+  } catch { /* private mode, etc. */ }
+}
+
+function ncCategorySection(cat, problems, { open, persist }) {
+  const pct2 = cat.total ? cat.solved / cat.total : 0;
+  const list = h('ul', { class: 'nc-row-list' }, problems.map(ncRowEl));
+  const empty = h('p', { class: 'muted small nc-cat-empty' }, 'No problems match the current filters.');
+  const det = h('details', { class: 'card nc-cat', open },
+    h('summary', null,
+      h('div', { class: 'nc-cat-head' },
+        h('h2', { text: cat.name }),
+        h('span', { class: 'nc-cat-count', text: `${cat.solved} / ${cat.total}` })),
+      miniBar(pct2)),
+    problems.length ? list : empty);
+  if (persist) det.addEventListener('toggle', () => saveCatOpen(cat.name, det.open));
+  return det;
+}
+
+async function viewNeetcode(main, { seq }) {
+  const f = getNcFilters();
+  main.append(pageHead('NeetCode 150', 'Your own NeetCode 150 deck, with its own review schedule.'));
+
+  const topEl = h('section', { class: 'card nc-top' }, loadingEl('Loading your NeetCode status'));
+  const adoptEl = h('section', null);
+  const summaryEl = h('section', { class: 'card nc-summary', 'aria-labelledby': 'nc-summary-title' }, loadingEl('Loading your progress'));
+  const filtersEl = h('div', { class: 'filters nc-filters', role: 'search', hidden: true });
+  const countEl = h('p', { class: 'count', role: 'status' });
+  const catsHost = h('div', { 'aria-busy': 'true' });
+  main.append(topEl, adoptEl, summaryEl, filtersEl, countEl, catsHost);
+
+  let tracker;
+  try {
+    tracker = await api('GET', '/api/neetcode');
+  } catch (err) {
+    if (!isCurrent(seq)) return;
+    topEl.replaceChildren();
+    summaryEl.replaceChildren();
+    catsHost.replaceChildren(errorState(err, () => router()));
+    return;
+  }
+  if (!isCurrent(seq)) return;
+
+  function renderAdoptBanner() {
+    if (!tracker.adoptable.length) {
+      adoptEl.replaceChildren();
+      return;
+    }
+    const moveBtn = h('button', { type: 'button', class: 'btn btn-primary btn-sm' }, 'Move to NeetCode');
+    moveBtn.addEventListener('click', async () => {
+      const ok = await confirmDialog({
+        title: 'Move problems to the NeetCode deck?',
+        body: `${plural(tracker.adoptable.length, 'problem')} from your main library will move to the NeetCode deck (tagged neetcode-150) and join its own review schedule. Nothing about their schedule or history changes.`,
+        confirmLabel: 'Move to NeetCode',
+      });
+      if (!ok) return;
+      moveBtn.disabled = true;
+      try {
+        const r = await api('POST', '/api/neetcode/adopt', {});
+        toast(`Moved ${plural(r.moved, 'problem')} to the NeetCode deck`, { type: 'success' });
+        refreshSummaries();
+        if (!isCurrent(seq)) return;
+        router(); // re-render this page: progress, next up and the review card all changed
+      } catch (err) {
+        toastError(err);
+        if (moveBtn.isConnected) moveBtn.disabled = false;
+      }
+    });
+    adoptEl.replaceChildren(h('div', { class: 'card nc-adopt-banner' },
+      h('p', null, `${plural(tracker.adoptable.length, 'problem')} in your main library ${tracker.adoptable.length === 1 ? 'is a' : 'are'} NeetCode 150 problem${tracker.adoptable.length === 1 ? '' : 's'}.`),
+      moveBtn));
+  }
+
+  // ---------- top card: "Review" (left) + "Learn something new" (right)
+  // The pick respects the filters below. With no status filter it only picks problems
+  // you haven't solved yet (falling back to everything if they're all solved).
+  let lastPickId = null;
+  const randomBtn = () => h('button', { type: 'button', class: 'btn btn-sm', onclick: randomPick }, icon('shuffle'), 'Random problem');
+  const learnHost = h('div', { class: 'nc-top-half nc-learn' });
+
+  function renderPick(p, label, note) {
+    const inLibrary = p.status !== 'not_started';
+    learnHost.replaceChildren(
+      h('h2', { text: 'Learn something new' }),
+      h('div', { class: 'nc-pick-info' },
+        h('span', { class: 'muted small', text: label }),
+        h('p', null,
+          h('a', { class: 'nc-pick-title', href: p.leetcode_url, target: '_blank', rel: 'noopener noreferrer' },
+            `#${p.id} ${p.title}`, icon('external', 14), srOnly(' (opens in a new tab)')),
+          ` · ${p.category} `, diffBadge(p.difficulty)),
+        note ? h('span', { class: 'muted small', text: note }) : null),
+      h('div', { class: 'btn-group' },
+        inLibrary
+          ? h('a', { class: 'btn btn-primary btn-sm', href: `#/problem/${p.problem.id}` }, 'Open')
+          : h('a', { class: 'btn btn-primary btn-sm', href: `#/add?nc=${encodeURIComponent(p.slug)}` }, icon('plus'), 'Add'),
+        randomBtn()));
+  }
+  function randomPick() {
+    const filtered = tracker.problems.filter((p) => ncMatchesFilters(p, f));
+    let pool = filtered;
+    let kind = '';
+    if (!f.status) {
+      const unsolved = filtered.filter((p) => p.status === 'not_started' || p.status === 'added');
+      if (unsolved.length) {
+        pool = unsolved;
+        kind = 'unsolved ';
+      }
+    }
+    const filtersOn = Boolean(f.q || f.difficulty || f.status || f.blind75);
+    if (!pool.length) {
+      toast('No problems match your filters. Clear them to pick from all 150.');
+      return;
+    }
+    // Avoid showing the same problem twice in a row when there's a choice.
+    const choices = pool.length > 1 ? pool.filter((p) => p.id !== lastPickId) : pool;
+    const pick = choices[Math.floor(Math.random() * choices.length)];
+    lastPickId = pick.id;
+    renderPick(pick, 'Random pick', `Picked from ${pool.length} ${kind}${pool.length === 1 ? 'problem' : 'problems'}${filtersOn ? ' matching your filters' : ''}`);
+    learnHost.querySelector('.nc-pick-title').focus();
+  }
+  const nextUp = tracker.problems.find((p) => p.status === 'not_started');
+  if (nextUp) {
+    renderPick(nextUp, 'Next up', null);
+  } else {
+    learnHost.replaceChildren(
+      h('h2', { text: 'Learn something new' }),
+      h('p', { class: 'muted small', text: 'You’ve added every problem in the NeetCode 150. Nice work.' }),
+      h('div', { class: 'btn-group' }, randomBtn()));
+  }
+
+  const reviewHost = h('div', { class: 'nc-top-half nc-review-half' }, loadingEl('Loading your review status'));
+  async function renderReviewHalf() {
+    let ncSummary;
+    let ncQueue;
+    try {
+      [ncSummary, ncQueue] = await Promise.all([
+        refreshSummary('neetcode'),
+        api('GET', '/api/queue?deck=neetcode'),
+      ]);
+    } catch (err) {
+      if (!isCurrent(seq)) return;
+      reviewHost.replaceChildren(h('h2', { text: 'Review' }), errorState(err, renderReviewHalf));
+      return;
+    }
+    if (!isCurrent(seq)) return;
+    const c = ncSummary.counts;
+    const newAvail = Math.min(ncQueue.new_left_today, c.new);
+    const canReview = c.due > 0 || newAvail > 0;
+    const tile = (label, value) => h('div', { class: 'nc-review-stat' },
+      h('div', { class: 'stat-label', text: label }), h('div', { class: 'stat-value', text: String(value) }));
+    reviewHost.replaceChildren(
+      h('h2', { text: 'Review' }),
+      h('div', { class: 'nc-review-stats' },
+        tile('Due', c.due), tile('New today', newAvail), tile('Streak', ncSummary.streak_days)),
+      canReview
+        ? h('a', { class: 'btn btn-primary', href: '#/neetcode/review' }, 'Start review')
+        : h('p', { class: 'muted small', text: 'Nothing to review right now.' }));
+  }
+  await renderReviewHalf();
+  if (!isCurrent(seq)) return;
+  topEl.replaceChildren(h('div', { class: 'nc-top-grid' }, reviewHost, learnHost));
+  renderAdoptBanner();
+
+  // ---------- summary
+  const t = tracker.totals;
+  const overallPct = t.total ? t.solved / t.total : 0;
+  summaryEl.replaceChildren(
+    h('div', { class: 'card-head' },
+      h('h2', { id: 'nc-summary-title', text: 'Your progress' }),
+      h('span', { class: 'muted small', text: `${plural(t.mastered, 'problem')} mastered` })),
+    h('div', { class: 'nc-overall' },
+      h('span', { class: 'nc-overall-num', text: `${t.solved} / ${t.total}` }),
+      miniBar(overallPct),
+      h('span', { class: 'muted', text: `${Math.round(overallPct * 100)}%` })),
+    h('div', { class: 'nc-stats-grid' },
+      ['Easy', 'Medium', 'Hard'].map((d) => {
+        const dd = t.by_difficulty[d];
+        return h('div', { class: 'nc-stat' },
+          h('div', { class: 'stat-label', text: d }),
+          h('div', { class: 'stat-value', text: `${dd.solved} / ${dd.total}` }),
+          miniBar(dd.total ? dd.solved / dd.total : 0));
+      }),
+      h('div', { class: 'nc-stat' },
+        h('div', { class: 'stat-label', text: 'Blind 75' }),
+        h('div', { class: 'stat-value', text: `${t.blind75.solved} / ${t.blind75.total}` }),
+        miniBar(t.blind75.total ? t.blind75.solved / t.blind75.total : 0))));
+
+  // ---------- filters
+  const search = h('input', { type: 'search', id: 'nc-q', value: f.q, autocomplete: 'off', placeholder: 'Search titles' });
+  const diffSel = h('select', { id: 'nc-diff' },
+    h('option', { value: '' }, 'All difficulties'),
+    ['Easy', 'Medium', 'Hard'].map((d) => h('option', { value: d }, d)));
+  diffSel.value = f.difficulty;
+  const statusSel = h('select', { id: 'nc-status' },
+    h('option', { value: '' }, 'All statuses'),
+    h('option', { value: 'not_solved' }, 'Not solved yet'),
+    h('option', { value: 'not_started' }, 'Not started'),
+    h('option', { value: 'added' }, 'Added'),
+    h('option', { value: 'solved' }, 'Solved'),
+    h('option', { value: 'mastered' }, 'Mastered'));
+  statusSel.value = f.status;
+  const blindChk = h('input', { type: 'checkbox', id: 'nc-blind75', checked: f.blind75 });
+  filtersEl.hidden = false;
+  filtersEl.replaceChildren(
+    h('div', { class: 'search-wrap' }, h('label', { for: 'nc-q', class: 'sr-only', text: 'Search problems' }), icon('search'), search),
+    h('div', null, h('label', { for: 'nc-diff', class: 'sr-only', text: 'Filter by difficulty' }), diffSel),
+    h('div', null, h('label', { for: 'nc-status', class: 'sr-only', text: 'Filter by status' }), statusSel),
+    h('label', { class: 'check nc-blind75-check', for: 'nc-blind75' }, blindChk, 'Blind 75 only'));
+
+  function renderList() {
+    const filtered = tracker.problems.filter((p) => ncMatchesFilters(p, f));
+    const active = Boolean(f.q || f.difficulty || f.status || f.blind75);
+    countEl.textContent = active ? `${plural(filtered.length, 'problem')} match` : plural(filtered.length, 'problem');
+    const byCat = new Map();
+    for (const p of filtered) {
+      if (!byCat.has(p.category)) byCat.set(p.category, []);
+      byCat.get(p.category).push(p);
+    }
+    if (!filtered.length) {
+      catsHost.replaceChildren(h('div', { class: 'card empty-inline' },
+        h('p', { text: 'No problems match these filters.' }),
+        h('div', { class: 'btn-group' },
+          h('button', { type: 'button', class: 'btn', onclick: clearNcFilters }, 'Clear filters'))));
+      return;
+    }
+    // Collapsed by default, except the first not-fully-solved category; remembered
+    // per category in localStorage. While a filter is active, every rendered
+    // category has a match (empty ones are excluded above), so all expand.
+    const catOpen = loadCatOpenState();
+    const firstUnsolved = tracker.categories.find((cat) => cat.total && cat.solved < cat.total);
+    catsHost.replaceChildren(...tracker.categories
+      .filter((cat) => byCat.has(cat.name))
+      .map((cat) => {
+        let open;
+        if (active) open = true;
+        else if (Object.prototype.hasOwnProperty.call(catOpen, cat.name)) open = catOpen[cat.name];
+        else open = Boolean(firstUnsolved) && cat.name === firstUnsolved.name;
+        return ncCategorySection(cat, byCat.get(cat.name), { open, persist: !active });
+      }));
+  }
+
+  function clearNcFilters() {
+    f.q = '';
+    f.difficulty = '';
+    f.status = '';
+    f.blind75 = false;
+    search.value = '';
+    diffSel.value = '';
+    statusSel.value = '';
+    blindChk.checked = false;
+    saveNcFilters(f);
+    renderList();
+  }
+
+  const onSearch = debounce(() => {
+    f.q = search.value.trim().toLowerCase();
+    saveNcFilters(f);
+    renderList();
+  }, 200);
+  onCleanup(onSearch.cancel);
+  search.addEventListener('input', onSearch);
+  diffSel.addEventListener('change', () => { f.difficulty = diffSel.value; saveNcFilters(f); renderList(); });
+  statusSel.addEventListener('change', () => { f.status = statusSel.value; saveNcFilters(f); renderList(); });
+  blindChk.addEventListener('change', () => { f.blind75 = blindChk.checked; saveNcFilters(f); renderList(); });
+
+  catsHost.removeAttribute('aria-busy');
+  renderList();
 }
 
 // ================================================================ Library view
@@ -1520,6 +2756,33 @@ async function viewLibrary(main, { seq }) {
   const sortSel = h('select', { id: 'lib-sort', class: 'compact' },
     MOBILE_SORTS.map(([v, label]) => h('option', { value: v }, label)));
 
+  // Deck segmented control (Main / NeetCode / Both), counts from the deck summaries.
+  const deckSeg = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': 'Deck' });
+  function paintDeckSeg() {
+    const dc = state.latestSummary ? state.latestSummary.deck_counts : null;
+    const options = [
+      { value: '', label: 'Main', count: dc ? dc.main.total : null },
+      { value: 'neetcode', label: 'NeetCode', count: dc ? dc.neetcode.total : null },
+      { value: 'all', label: 'Both', count: dc ? dc.main.total + dc.neetcode.total : null },
+    ];
+    deckSeg.replaceChildren(...options.map((o) => {
+      const id = `lib-deck-${o.value || 'main'}`;
+      const input = h('input', {
+        type: 'radio', name: 'lib-deck', id, value: o.value, checked: L.deck === o.value,
+        onchange: () => {
+          L.deck = o.value;
+          L.tag = '';
+          tagSel.value = '';
+          load();
+          loadTagsForDeck();
+        },
+      });
+      return h('label', { class: 'seg-option', for: id },
+        input, o.label, o.count !== null ? h('span', { class: 'seg-count', text: ` (${o.count})` }) : null);
+    }));
+  }
+  paintDeckSeg();
+
   const countEl = h('p', { class: 'count', role: 'status' });
   const clearBtn = h('button', { type: 'button', class: 'btn btn-ghost btn-sm', hidden: true }, 'Clear filters');
   const filters = h('div', { class: 'filters', role: 'search' },
@@ -1547,7 +2810,7 @@ async function viewLibrary(main, { seq }) {
   const cardList = h('ul', { class: 'card-list', 'aria-label': 'Problems' });
   const emptyEl = h('div', { class: 'card empty-inline', hidden: true });
   const listHost = h('div', { 'aria-busy': 'true' }, tableWrap, cardList, emptyEl);
-  main.append(filters, meta, listHost);
+  main.append(deckSeg, filters, meta, listHost);
 
   let problems = [];
   let fetchToken = 0;
@@ -1584,7 +2847,7 @@ async function viewLibrary(main, { seq }) {
     }
     sortSel.value = sortVal;
 
-    const filtered = Boolean(L.q || L.tag || L.status);
+    const filtered = Boolean(L.q || L.tag || L.status || L.deck);
     const n = problems.length;
     countEl.textContent = filtered ? `${plural(n, 'problem')} match` : plural(n, 'problem');
     clearBtn.hidden = !filtered;
@@ -1618,7 +2881,7 @@ async function viewLibrary(main, { seq }) {
     cardList.hidden = empty;
     emptyEl.hidden = !empty;
     if (empty) {
-      const noneAtAll = !filtered && state.summary && state.summary.counts.total === 0;
+      const noneAtAll = !filtered && state.summaries.main && state.summaries.main.counts.total === 0;
       emptyEl.replaceChildren(
         h('p', { text: noneAtAll ? 'Your library is empty.' : 'No problems match these filters.' }),
         h('div', { class: 'btn-group' },
@@ -1634,6 +2897,7 @@ async function viewLibrary(main, { seq }) {
     if (L.q) qs.set('q', L.q);
     if (L.tag) qs.set('tag', L.tag);
     if (L.status) qs.set('status', L.status);
+    if (L.deck) qs.set('deck', L.deck);
     listHost.setAttribute('aria-busy', 'true');
     listHost.style.opacity = problems.length ? '0.6' : '';
     try {
@@ -1678,24 +2942,34 @@ async function viewLibrary(main, { seq }) {
     render();
   });
 
-  const [tags] = await Promise.all([
-    loadTags().catch(() => []),
-    refreshSummary().catch(() => null),
-  ]);
+  async function loadTagsForDeck() {
+    let tags = [];
+    try {
+      tags = await api('GET', `/api/tags${L.deck ? `?deck=${L.deck}` : ''}`).then((r) => r.tags);
+    } catch {
+      tags = [];
+    }
+    if (!isCurrent(seq)) return;
+    tagSel.replaceChildren(h('option', { value: '' }, 'All tags'),
+      ...tags.map((t) => h('option', { value: t.tag }, `${t.tag} (${t.count})`)));
+    if (L.tag && !tags.some((t) => t.tag === L.tag)) L.tag = '';
+    tagSel.value = L.tag;
+  }
+
+  await Promise.all([loadTagsForDeck(), refreshSummaries()]);
   if (!isCurrent(seq)) return;
-  tagSel.append(...tags.map((t) => h('option', { value: t.tag }, `${t.tag} (${t.count})`)));
-  if (L.tag && !tags.some((t) => t.tag === L.tag)) L.tag = '';
-  tagSel.value = L.tag;
+  paintDeckSeg();
   await load();
 }
 
 // ================================================================ Problem view
 async function viewProblem(main, { seq, params }) {
   const id = Number(params[0]);
-  const ctrl = { id, seq, main, mode: 'view', p: null, card: null };
+  const ctrl = { id, seq, main, mode: 'view', p: null, card: null, attempt: null };
   state.detail = ctrl;
   onCleanup(() => {
     if (ctrl.card) ctrl.card.destroy();
+    if (ctrl.attempt) ctrl.attempt.destroy();
     if (state.detail === ctrl) state.detail = null;
   });
   main.append(backLink(), h('h1', { class: 'sr-only', tabindex: '-1', text: 'Loading problem' }), loadingEl('Loading problem'));
@@ -1730,6 +3004,10 @@ function renderDetail(ctrl, { focus } = {}) {
     ctrl.card.destroy();
     ctrl.card = null;
   }
+  if (ctrl.attempt) {
+    ctrl.attempt.destroy();
+    ctrl.attempt = null;
+  }
   state.activeReview = null;
   document.title = `${p.title} · DSA Review`;
 
@@ -1742,7 +3020,7 @@ function renderDetail(ctrl, { focus } = {}) {
         showReviewToast(updated, 'single');
         ctrl.p = updated;
         ctrl.mode = 'view';
-        refreshSummary().catch(() => {});
+        refreshSummaries();
         renderDetail(ctrl, { focus: true });
       },
       onClose: () => {
@@ -1787,7 +3065,13 @@ function renderDetail(ctrl, { focus } = {}) {
     });
   } else {
     const heading = h('h1', { tabindex: '-1' }, titleLink(p, 20));
-    main.replaceChildren(backLink(), detailHeader(ctrl, heading), detailBody(p));
+    main.replaceChildren(
+      backLink(),
+      detailHeader(ctrl, heading),
+      memoryStatsRow(p),
+      detailActions(ctrl),
+      detailBody(p, ctrl),
+    );
     focusTarget = heading;
   }
   if (focus || hadHeadingFocus) {
@@ -1797,6 +3081,40 @@ function renderDetail(ctrl, { focus } = {}) {
 }
 
 function detailHeader(ctrl, heading) {
+  const p = ctrl.p;
+  return h('header', { class: 'detail-head' },
+    heading,
+    h('div', { class: 'meta-row' },
+      statusPill(p),
+      deckPill(p.deck),
+      diffBadge(p.difficulty),
+      p.source ? h('span', { class: 'source', text: p.source }) : null,
+      tagChips(p.tags)));
+}
+
+/** Compact one-line row of memory stats, replacing the old tall "Memory" sidebar card. */
+function memoryStatsRow(p) {
+  const isNew = p.status === 'new';
+  let note = null;
+  if (p.suspended) note = 'Suspended. It won’t appear in Today until you unsuspend it.';
+  else if (isNew) note = 'Not practiced yet. It’ll show up in Today as a new problem.';
+
+  const item = (label, value, sub) => h('div', { class: 'mstat' },
+    h('span', { class: 'mstat-label', text: label }),
+    h('span', { class: 'mstat-value' }, value, sub ? h('span', { class: 'mstat-sub', text: sub }) : null));
+
+  return h('div', { class: 'card memory-row', 'aria-label': 'Memory stats' },
+    note ? h('p', { class: 'memory-note', text: note }) : null,
+    h('div', { class: 'mstats' },
+      item('Next review', isNew ? 'Not scheduled' : fmtDate(p.due, { weekday: false }), isNew ? null : relShort(p.due)),
+      item('Predicted recall', pct(p.retrievability)),
+      item('Memory strength', fmtStrength(p.stability)),
+      item('Difficulty for you', p.fsrs_difficulty === null ? '—' : `${p.fsrs_difficulty.toFixed(1)} / 10`),
+      item('Reviews · Lapses', `${p.reps} · ${p.lapses}`)));
+}
+
+/** Review now / Edit / More (Suspend, Undo, Delete) - the primary actions for a problem. */
+function detailActions(ctrl) {
   const p = ctrl.p;
   const busyWrap = async (btn, fn) => {
     btn.disabled = true;
@@ -1817,123 +3135,142 @@ function detailHeader(ctrl, heading) {
     ctrl.mode = 'edit';
     renderDetail(ctrl, { focus: true });
   });
-  const suspendBtn = h('button', { type: 'button', class: 'btn', 'aria-pressed': String(p.suspended) }, p.suspended ? 'Unsuspend' : 'Suspend');
-  suspendBtn.addEventListener('click', () => busyWrap(suspendBtn, async () => {
-    const updated = await api('PATCH', `/api/problems/${p.id}`, { suspended: !p.suspended });
-    toast(updated.suspended ? 'Suspended. It won’t show up in Today until you unsuspend it.' : 'Unsuspended. It’s back on your schedule.', { type: 'success' });
-    ctrl.p = updated;
-    refreshSummary().catch(() => {});
-    renderDetail(ctrl);
-    const again = [...ctrl.main.querySelectorAll('.detail-actions button')].find((b) => b.hasAttribute('aria-pressed'));
-    if (again) again.focus();
-  }));
-  const undoBtn = h('button', { type: 'button', class: 'btn', disabled: !p.history.length }, 'Undo last review');
-  undoBtn.addEventListener('click', () => busyWrap(undoBtn, async () => {
-    const updated = await api('POST', `/api/problems/${p.id}/undo`, {});
-    toast('Last review undone. The schedule is back to how it was.', { type: 'success' });
-    ctrl.p = updated;
-    refreshSummary().catch(() => {});
-    renderDetail(ctrl, { focus: true });
-  }));
-  const deleteBtn = h('button', { type: 'button', class: 'btn btn-danger' }, 'Delete');
-  deleteBtn.addEventListener('click', async () => {
-    const n = p.history.length;
-    const ok = await confirmDialog({
-      title: 'Delete this problem?',
-      body: `“${p.title}”${n ? ` and its ${plural(n, 'review')}` : ''} will be permanently deleted. This can’t be undone.`,
-      confirmLabel: 'Delete problem',
-    });
-    if (!ok) return;
-    await busyWrap(deleteBtn, async () => {
-      await api('DELETE', `/api/problems/${p.id}`, {});
-      if (state.session) state.session.order = state.session.order.filter((x) => x !== p.id);
-      toast(`Deleted “${p.title}”`, { type: 'success' });
-      refreshSummary().catch(() => {});
-      location.hash = '#/library';
-    });
+
+  const noopBtn = h('button', { hidden: true });
+  const more = menuButton({
+    label: 'More',
+    small: false, // sits next to full-size Review now / Edit buttons
+    items: [
+      {
+        label: p.suspended ? 'Unsuspend' : 'Suspend',
+        onClick: () => busyWrap(noopBtn, async () => {
+          const updated = await api('PATCH', `/api/problems/${p.id}`, { suspended: !p.suspended });
+          toast(updated.suspended ? 'Suspended. It won’t show up in Today until you unsuspend it.' : 'Unsuspended. It’s back on your schedule.', { type: 'success' });
+          ctrl.p = updated;
+          refreshSummaries();
+          renderDetail(ctrl);
+        }),
+      },
+      {
+        label: 'Undo last review',
+        disabled: !p.history.length,
+        onClick: () => busyWrap(noopBtn, async () => {
+          const updated = await api('POST', `/api/problems/${p.id}/undo`, {});
+          toast('Last review undone. The schedule is back to how it was.', { type: 'success' });
+          ctrl.p = updated;
+          refreshSummaries();
+          renderDetail(ctrl, { focus: true });
+        }),
+      },
+      {
+        label: 'Delete',
+        danger: true,
+        onClick: async () => {
+          const n = p.history.length;
+          const ok = await confirmDialog({
+            title: 'Delete this problem?',
+            body: `“${p.title}”${n ? ` and its ${plural(n, 'review')}` : ''} will be permanently deleted. This can’t be undone.`,
+            confirmLabel: 'Delete problem',
+          });
+          if (!ok) return;
+          await busyWrap(noopBtn, async () => {
+            await api('DELETE', `/api/problems/${p.id}`, {});
+            for (const s of Object.values(state.sessions)) {
+              if (s) s.order = s.order.filter((x) => x !== p.id);
+            }
+            toast(`Deleted “${p.title}”`, { type: 'success' });
+            refreshSummaries();
+            location.hash = '#/library';
+          });
+        },
+      },
+    ],
   });
 
-  return h('header', { class: 'detail-head' },
-    heading,
-    h('div', { class: 'meta-row' },
-      statusPill(p),
-      diffBadge(p.difficulty),
-      p.source ? h('span', { class: 'source', text: p.source }) : null,
-      tagChips(p.tags)),
-    h('div', { class: 'btn-group detail-actions' }, reviewBtn, editBtn, suspendBtn, undoBtn, deleteBtn));
+  return h('div', { class: 'btn-group detail-actions' }, reviewBtn, editBtn, more.el);
 }
 
-function detailBody(p) {
-  const isNew = p.status === 'new';
-  const row = (label, value, sub) => h('div', null,
-    h('dt', { text: label }),
-    h('dd', null, value, sub ? h('span', { class: 'small muted', text: sub }) : null));
-
-  let note = null;
-  if (p.suspended) note = 'Suspended. It won’t appear in Today until you unsuspend it.';
-  else if (isNew) note = 'Not practiced yet. It’ll show up in Today as a new problem.';
-
-  const recallRow = row('Predicted recall now', pct(p.retrievability));
-  if (!isNew) {
-    const value = Math.round((p.retrievability || 0) * 100);
-    const bar = h('div');
-    bar.style.width = `${value}%`;
-    recallRow.append(h('div', {
-      class: 'recall-meter', 'aria-hidden': 'true',
-    }, bar));
-  }
-  const memory = h('aside', { class: 'card memory', 'aria-labelledby': 'memory-title' },
-    h('h2', { id: 'memory-title', text: 'Memory' }),
-    note ? h('p', { class: 'memory-note', text: note }) : null,
-    h('dl', null,
-      row('Status', statusPill(p)),
-      row('Next review', isNew ? 'Not scheduled' : fmtDate(p.due), isNew ? null : relShort(p.due)),
-      recallRow,
-      row('Memory strength', fmtStrength(p.stability)),
-      row('Difficulty for you', p.fsrs_difficulty === null ? '—' : `${p.fsrs_difficulty.toFixed(1)} / 10`),
-      row('Reviews', String(p.reps)),
-      row('Lapses', String(p.lapses)),
-      row('Added', fmtDate(p.created_at, { weekday: false }))));
-
-  const section = (label, content) => h('section', { class: 'content-section' }, h('h3', { text: label }), content);
-  const emptyNote = (t) => h('p', { class: 'empty-note', text: t });
-  const content = h('div', { class: 'card' },
-    h('h2', { class: 'sr-only', text: 'Problem content' }),
-    section('Prompt', p.prompt.trim() ? h('div', { class: 'prompt', text: p.prompt }) : emptyNote('No prompt saved.')),
-    section('Key insight', p.insight
-      ? h('div', { class: 'insight' }, h('p', { text: p.insight }))
-      : emptyNote('No key insight saved.')),
-    section('Notes', p.notes.trim() ? h('div', { class: 'prewrap', text: p.notes }) : emptyNote('No notes saved.')),
-    section('Solution', p.solution.trim() ? codeBlock(p.solution, p.language) : emptyNote('No solution saved.')));
-
-  const history = h('section', { class: 'card', 'aria-labelledby': 'history-title' },
+function attemptCard(p, ctrl) {
+  const holder = h('div', null, loadingEl('Loading your attempt'));
+  const section = h('section', { class: 'card attempt-card', 'aria-labelledby': 'attempt-title' },
     h('div', { class: 'card-head' },
-      h('h2', { id: 'history-title', text: 'Review history' }),
-      h('p', { text: p.history.length ? plural(p.history.length, 'review') : '' })),
-    p.history.length
-      ? h('div', { class: 'table-wrap' },
-        h('table', { class: 'data-table history-table' },
-          h('thead', null, h('tr', null,
-            h('th', { scope: 'col', text: 'Date' }),
-            h('th', { scope: 'col', text: 'Rating' }),
-            h('th', { scope: 'col', class: 'num', text: 'Time taken' }),
-            h('th', { scope: 'col', class: 'h-next', text: 'Next review set to' }))),
-          h('tbody', null, p.history.map((r) => {
-            const rating = RATING_BY_VALUE[r.rating];
-            const gapDays = r.interval_days ?? null;
-            return h('tr', null,
-              h('td', { class: 'nowrap', text: fmtDateTime(r.reviewed_at) }),
-              h('td', null,
-                h('span', { class: `rating-label r-${rating.key}`, text: rating.label }),
-                r.kind === 'added' ? h('span', { class: 'muted history-kind', text: 'when added' }) : null),
-              h('td', { class: 'num', text: r.duration_ms === null ? '—' : fmtClock(r.duration_ms) }),
-              h('td', { class: 'h-next' }, r.next_due ? `${fmtDate(r.next_due)} · ${fmtInterval(gapDays)}` : '—'));
-          }))))
-      : h('p', { class: 'empty-note', text: 'No reviews yet.' }));
+      h('h2', { id: 'attempt-title', text: 'Your attempt' })),
+    holder);
+  (async () => {
+    let draft;
+    try {
+      draft = await api('GET', `/api/problems/${p.id}/draft`);
+    } catch {
+      draft = { code: '', language: p.language || 'python' };
+    }
+    if (!isCurrent(ctrl.seq) || !holder.isConnected) return;
+    const code = draft.code || starterTemplate(p.title);
+    const attempt = attemptEditor({
+      problem: p,
+      initialCode: code,
+      initialLanguage: draft.language || p.language || 'python',
+      ariaLabel: `Attempt editor for ${p.title}`,
+      autosaveDraft: true,
+      showSaveAsSolution: true,
+    });
+    ctrl.attempt = attempt;
+    holder.replaceWith(attempt.el);
+  })();
+  return section;
+}
 
-  return h('div', { class: 'detail-grid' },
-    h('div', { class: 'detail-main' }, content, history),
-    memory);
+function detailBody(p, ctrl) {
+  const emptyNote = (...parts) => h('p', { class: 'empty-note' }, parts);
+  const promptCard = h('section', { class: 'card', 'aria-labelledby': 'prompt-title' },
+    h('div', { class: 'card-head' }, h('h2', { id: 'prompt-title', text: 'Problem' })),
+    p.prompt.trim()
+      ? h('div', { class: 'prompt', text: p.prompt })
+      : emptyNote(
+        'No problem statement saved. ',
+        p.url ? h('a', { href: p.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open it on LeetCode', icon('external', 12), srOnly(' (opens in a new tab)')) : null,
+        p.url ? ' or add one with Edit.' : 'Add one with Edit.',
+      ));
+
+  // ---------- notes (spoilers while attempting - collapsed by default)
+  const hasInsight = Boolean(p.insight);
+  const hasNotes = Boolean(p.notes && p.notes.trim());
+  const hasSolution = Boolean(p.solution && p.solution.trim());
+  const notesBody = (hasInsight || hasNotes || hasSolution)
+    ? h('div', { class: 'stack' },
+      hasInsight ? h('div', null, h('h3', { class: 'content-sub', text: 'Key insight' }), h('div', { class: 'insight' }, h('p', { text: p.insight }))) : null,
+      hasNotes ? h('div', null, h('h3', { class: 'content-sub', text: 'Notes' }), h('div', { class: 'prewrap', text: p.notes })) : null,
+      hasSolution ? h('div', null, h('h3', { class: 'content-sub', text: 'Solution' }), codeBlock(p.solution, p.language)) : null)
+    : emptyNote('Nothing saved yet — add a key insight with Edit.');
+  const notesDetails = h('details', { class: 'card section-details' },
+    h('summary', { class: 'section-summary' }, 'Show your notes (key insight, notes, solution)'),
+    h('div', { class: 'details-body' }, notesBody));
+
+  // ---------- review history
+  const historyBody = p.history.length
+    ? h('div', { class: 'table-wrap' },
+      h('table', { class: 'data-table history-table' },
+        h('thead', null, h('tr', null,
+          h('th', { scope: 'col', text: 'Date' }),
+          h('th', { scope: 'col', text: 'Rating' }),
+          h('th', { scope: 'col', class: 'num', text: 'Time taken' }),
+          h('th', { scope: 'col', class: 'h-next', text: 'Next review set to' }))),
+        h('tbody', null, p.history.map((r) => {
+          const rating = RATING_BY_VALUE[r.rating];
+          const gapDays = r.interval_days ?? null;
+          return h('tr', null,
+            h('td', { class: 'nowrap', text: fmtDateTime(r.reviewed_at) }),
+            h('td', null,
+              h('span', { class: `rating-label r-${rating.key}`, text: rating.label }),
+              r.kind === 'added' ? h('span', { class: 'muted history-kind', text: 'when added' }) : null),
+            h('td', { class: 'num', text: r.duration_ms === null ? '—' : fmtClock(r.duration_ms) }),
+            h('td', { class: 'h-next' }, r.next_due ? `${fmtDate(r.next_due)} · ${fmtInterval(gapDays)}` : '—'));
+        }))))
+    : emptyNote('No reviews yet.');
+  const historyDetails = h('details', { class: 'card section-details' },
+    h('summary', { class: 'section-summary' }, `Review history (${p.history.length})`),
+    h('div', { class: 'details-body' }, historyBody));
+
+  return h('div', { class: 'detail-stack' }, promptCard, attemptCard(p, ctrl), notesDetails, historyDetails);
 }
 
 // ================================================================ Settings view
@@ -1980,7 +3317,6 @@ async function viewSettings(main, { seq }) {
   renderPreview(res.interval_preview);
 
   const maxInt = h('input', { type: 'number', min: '1', max: '3650', step: '1', inputmode: 'numeric', value: String(s.maximum_interval) });
-  const newPerDay = h('input', { type: 'number', min: '0', max: '100', step: '1', inputmode: 'numeric', value: String(s.new_per_day) });
   const dayStart = h('select', null, Array.from({ length: 24 }, (_, hr) => h('option', { value: String(hr) }, fmtHour(hr))));
   dayStart.value = String(s.day_starts_at);
   const againNext = h('input', { type: 'checkbox', id: 'set-again', checked: Boolean(s.again_next_day) });
@@ -2071,8 +3407,9 @@ async function viewSettings(main, { seq }) {
       // Only this key: unsaved edits in the form above are left alone.
       const r = await api('PATCH', '/api/settings', { fsrs_parameters: null });
       toast('Reset to defaults — schedule updated', { type: 'success' });
-      state.session = null;
-      refreshSummary().catch(() => {});
+      state.sessions.main = null;
+      state.sessions.neetcode = null;
+      refreshSummaries();
       if (!isCurrent(seq)) return;
       renderParams(r.settings.fsrs_parameters);
       document.getElementById('set-params-value').focus();
@@ -2100,7 +3437,6 @@ async function viewSettings(main, { seq }) {
       previewBox),
     h('div', { class: 'settings-fields' },
       numField('set-maxint', 'Maximum interval (days)', maxInt, 'The longest gap between reviews. Keeps problems from vanishing for months.'),
-      numField('set-newper', 'New problems per day', newPerDay, 'Unsolved problems introduced in Today each day.'),
       numField('set-daystart', 'New day starts at', dayStart, 'Reviews after midnight still count for the previous day until this hour.')),
     h('label', { class: 'check', for: 'set-again' },
       againNext,
@@ -2108,26 +3444,27 @@ async function viewSettings(main, { seq }) {
         h('span', { class: 'choice-title', text: 'Again brings it back tomorrow' }),
         h('span', { class: 'choice-desc', text: 'When you rate a problem Again, it is due the next day no matter what the algorithm suggests.' }))),
     paramsRow,
-    h('div', { class: 'form-actions' }, saveBtn));
+    h('div', { class: 'form-actions' },
+      saveBtn,
+      h('span', { class: 'hint', text: 'Saving reschedules every problem, so this needs an explicit save.' })));
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const mi = intIn(maxInt, 1, 3650);
-    const npd = intIn(newPerDay, 0, 100);
     setErr('set-maxint', mi === null ? 'Enter a whole number of days from 1 to 3650.' : '');
-    setErr('set-newper', npd === null ? 'Enter a whole number from 0 to 100.' : '');
-    if (mi === null || npd === null) {
-      (mi === null ? maxInt : newPerDay).focus();
+    if (mi === null) {
+      maxInt.focus();
       return;
     }
     saveBtn.disabled = true;
     try {
-      // Deliberately no fsrs_parameters here, so saving can't overwrite personalized parameters.
+      // Deliberately no fsrs_parameters (and no new_per_day - that's not a scheduling key
+      // and lives in the Daily new problems card, which saves itself) here, so saving
+      // can't overwrite personalized parameters or trigger an extra reschedule.
       const r = await api('PATCH', '/api/settings', {
         desired_retention: Number(retention.value),
         maximum_interval: mi,
         again_next_day: againNext.checked,
-        new_per_day: npd,
         day_starts_at: Number(dayStart.value),
       });
       if (isCurrent(seq)) {
@@ -2139,8 +3476,9 @@ async function viewSettings(main, { seq }) {
         renderParams(r.settings.fsrs_parameters);
       }
       toast('Saved — schedule updated', { type: 'success' });
-      state.session = null;
-      refreshSummary().catch(() => {});
+      state.sessions.main = null;
+      state.sessions.neetcode = null;
+      refreshSummaries();
     } catch (err) {
       toastError(err);
     } finally {
@@ -2181,7 +3519,9 @@ async function viewSettings(main, { seq }) {
       }
       const r = await api('POST', '/api/import', data);
       toast(`Added ${plural(r.added, 'problem')}, skipped ${r.skipped} already here`, { type: 'success' });
-      refreshSummary().catch(() => {});
+      state.sessions.main = null;
+      state.sessions.neetcode = null;
+      refreshSummaries();
     } catch (err) {
       toastError(err);
     } finally {
@@ -2197,15 +3537,270 @@ async function viewSettings(main, { seq }) {
       h('label', { class: 'btn file-btn' }, icon('upload'), 'Import backup', fileInput)),
     h('p', { class: 'hint backup-note', text: 'Importing skips problems that are already here, so it’s safe to run more than once. A copy of your database is also saved to data/backups every time the app starts (last 10 kept).' }));
 
-  main.append(h('div', { class: 'settings-grid' }, schedCard, guideCard, backupCard));
+  // ---------- Daily new problems: Main + NeetCode per-day limits, and the toggle that
+  // folds NeetCode into the main Today/Library. All three autosave on change.
+  async function autosavePatch(patch, { onError } = {}) {
+    try {
+      await api('PATCH', '/api/settings', patch);
+      toast('Saved', { type: 'success', duration: 1800 });
+      return true;
+    } catch (err) {
+      toastError(err);
+      if (onError) onError();
+      return false;
+    }
+  }
+
+  const dailyMain = h('input', { type: 'number', min: '0', max: '100', step: '1', inputmode: 'numeric', value: String(s.new_per_day) });
+  async function commitDailyMain() {
+    const n = intIn(dailyMain, 0, 100);
+    setErr('set-daily-main', n === null ? 'Enter a whole number from 0 to 100.' : '');
+    if (n === null) return;
+    const ok = await autosavePatch({ new_per_day: n });
+    if (ok) refreshSummaries();
+  }
+  dailyMain.addEventListener('change', commitDailyMain);
+
+  const dailyNc = h('input', { type: 'number', min: '0', max: '100', step: '1', inputmode: 'numeric', value: String(s.neetcode_new_per_day) });
+  async function commitDailyNc() {
+    const n = intIn(dailyNc, 0, 100);
+    setErr('set-daily-nc', n === null ? 'Enter a whole number from 0 to 100.' : '');
+    if (n === null) return;
+    const ok = await autosavePatch({ neetcode_new_per_day: n });
+    if (ok) refreshSummaries();
+  }
+  dailyNc.addEventListener('change', commitDailyNc);
+
+  const ncInMain = h('input', { type: 'checkbox', id: 'set-nc-in-main', checked: Boolean(s.neetcode_in_main) });
+  ncInMain.addEventListener('change', async () => {
+    const checked = ncInMain.checked;
+    ncInMain.disabled = true;
+    const ok = await autosavePatch({ neetcode_in_main: checked }, { onError: () => { ncInMain.checked = !checked; } });
+    ncInMain.disabled = false;
+    if (ok) {
+      state.sessions.main = null; // the main queue may now include (or exclude) NeetCode problems
+      refreshSummaries();
+    }
+  });
+
+  const dailyCard = h('section', { class: 'card', 'aria-labelledby': 'daily-title' },
+    h('div', { class: 'card-head' },
+      h('h2', { id: 'daily-title', text: 'Daily new problems' }),
+      h('p', { text: 'How many unsolved problems show up in each review session per day.' })),
+    h('div', { class: 'settings-fields' },
+      numField('set-daily-main', 'Main per day', dailyMain, 'New problems introduced in Today each day.'),
+      numField('set-daily-nc', 'NeetCode per day', dailyNc, 'New NeetCode problems introduced in the NeetCode review each day.')),
+    h('label', { class: 'check settings-check', for: 'set-nc-in-main' },
+      ncInMain,
+      h('span', null,
+        h('span', { class: 'choice-title', text: 'Show NeetCode problems on Today and Library' }),
+        h('span', { class: 'choice-desc', text: 'When on, due and new NeetCode problems also appear in your regular Today session and library view.' }))));
+
+  // ---------- code runner
+  const allowRun = h('input', { type: 'checkbox', id: 'set-allow-run', checked: Boolean(s.allow_code_run) });
+  allowRun.addEventListener('change', async () => {
+    const checked = allowRun.checked;
+    allowRun.disabled = true;
+    try {
+      await api('PATCH', '/api/settings', { allow_code_run: checked });
+      toast(checked ? 'Run is turned on' : 'Run is turned off', { type: 'success' });
+    } catch (err) {
+      allowRun.checked = !checked;
+      toastError(err);
+    } finally {
+      allowRun.disabled = false;
+    }
+  });
+  const runCard = h('section', { class: 'card', 'aria-labelledby': 'run-title' },
+    h('div', { class: 'card-head' }, h('h2', { id: 'run-title', text: 'Code runner' })),
+    h('p', { class: 'explainer', text: 'The Attempt editor’s Run button executes your code as a real Python process on this computer, only from this app’s own page (see README → Security notes).' }),
+    h('label', { class: 'check', for: 'set-allow-run' },
+      allowRun,
+      h('span', null,
+        h('span', { class: 'choice-title', text: 'Allow running code' }),
+        h('span', { class: 'choice-desc', text: 'Turn off to disable the Run button everywhere. You can still write and save your attempts.' }))));
+
+  // ---------- Claude help
+  const claudeCard = await claudeHelpCard(s, seq);
+
+  main.append(h('div', { class: 'settings-grid' },
+    claudeCard, dailyCard, schedCard, runCard, backupCard, guideCard));
+}
+
+/** The "Claude help" card on Settings: mode, API key, model, CLI status, test connection. */
+async function claudeHelpCard(s, seq) {
+  let status;
+  try {
+    status = await api('GET', '/api/claude/status');
+  } catch {
+    status = { mode: s.claude_mode, model: s.claude_model, api_key: { set: false, hint: null, source: null },
+              cli: { found: false, path: null } };
+  }
+  if (!isCurrent(seq)) return h('section', { class: 'card', hidden: true });
+
+  const MODE_OPTIONS = [
+    { value: 'off', title: 'Off', desc: 'Ask Claude is turned off everywhere.' },
+    { value: 'api', title: 'API key',
+      desc: 'Billed per use from your Anthropic Console account (platform.claude.com).' },
+    { value: 'cli', title: 'Claude Code CLI',
+      desc: 'Uses the `claude` command-line tool with your own Claude plan. This app never sees your login.' },
+  ];
+  const modeInputs = MODE_OPTIONS.map((o) => h('label', { class: 'check claude-settings-mode', for: `set-claude-${o.value}` },
+    h('input', { type: 'radio', name: 'set-claude-mode', id: `set-claude-${o.value}`, value: o.value, checked: status.mode === o.value }),
+    h('span', null,
+      h('span', { class: 'choice-title', text: o.title }),
+      h('span', { class: 'choice-desc', text: o.desc }))));
+  const modeGroup = h('div', { class: 'form', role: 'radiogroup', 'aria-label': 'How Ask Claude connects' }, modeInputs);
+
+  async function saveMode(value) {
+    try {
+      await api('PATCH', '/api/settings', { claude_mode: value });
+      toast('Saved', { type: 'success' });
+    } catch (err) {
+      toastError(err);
+    }
+  }
+  for (const input of modeGroup.querySelectorAll('input')) {
+    input.addEventListener('change', () => { if (input.checked) { saveMode(input.value); renderSections(); } });
+  }
+
+  // ---- API key
+  const keyInput = h('input', { type: 'password', autocomplete: 'off', 'aria-label': 'Anthropic API key', placeholder: 'sk-ant-…' });
+  const keyStatus = h('span', { class: 'hint claude-key-status' });
+  function paintKeyStatus() {
+    keyStatus.textContent = status.api_key.set
+      ? `Key saved (${status.api_key.hint}${status.api_key.source === 'env' ? ' · from ANTHROPIC_API_KEY' : ''})`
+      : 'No key saved yet.';
+  }
+  paintKeyStatus();
+  const keySaveBtn = h('button', { type: 'button', class: 'btn btn-primary btn-sm' }, 'Save');
+  const keyRemoveBtn = h('button', { type: 'button', class: 'btn btn-sm', disabled: !status.api_key.set }, 'Remove');
+  keySaveBtn.addEventListener('click', async () => {
+    const value = keyInput.value.trim();
+    if (!value) {
+      toast('Paste your API key first.', { type: 'error' });
+      return;
+    }
+    keySaveBtn.disabled = true;
+    try {
+      await api('PUT', '/api/claude/key', { api_key: value });
+      keyInput.value = '';
+      status.api_key = { set: true, hint: `…${value.slice(-4)}`, source: 'file' };
+      paintKeyStatus();
+      keyRemoveBtn.disabled = false;
+      toast('API key saved', { type: 'success' });
+    } catch (err) {
+      toastError(err);
+    } finally {
+      keySaveBtn.disabled = false;
+    }
+  });
+  keyRemoveBtn.addEventListener('click', async () => {
+    keyRemoveBtn.disabled = true;
+    try {
+      await api('DELETE', '/api/claude/key', {});
+      status.api_key = { set: false, hint: null, source: null };
+      paintKeyStatus();
+      toast('API key removed', { type: 'success' });
+    } catch (err) {
+      toastError(err);
+      keyRemoveBtn.disabled = false;
+    }
+  });
+  const keyField = h('div', { class: 'field claude-key-field' },
+    h('label', { for: 'set-claude-key', text: 'Anthropic API key' }),
+    Object.assign(keyInput, { id: 'set-claude-key' }),
+    h('div', { class: 'btn-group' }, keySaveBtn, keyRemoveBtn),
+    keyStatus);
+
+  // ---- model
+  const MODEL_OPTIONS = [
+    { value: 'haiku', label: 'Haiku 4.5 — fastest & cheapest' },
+    { value: 'sonnet', label: 'Sonnet 5 — recommended' },
+    { value: 'opus', label: 'Opus 5.5 — most capable, slower & pricier' },
+  ];
+  const modelSelect = h('select', { id: 'set-claude-model' },
+    MODEL_OPTIONS.map((o) => h('option', { value: o.value }, o.label)));
+  modelSelect.value = status.model;
+  modelSelect.addEventListener('change', async () => {
+    try {
+      await api('PATCH', '/api/settings', { claude_model: modelSelect.value });
+      toast('Saved', { type: 'success' });
+    } catch (err) {
+      toastError(err);
+    }
+  });
+  const modelField = h('div', { class: 'field' },
+    h('label', { for: 'set-claude-model', text: 'Model' }), modelSelect);
+
+  // ---- CLI status + install steps
+  const cliStatus = h('p', { class: 'hint' },
+    status.cli.found
+      ? `Found the \`claude\` command at ${status.cli.path}.`
+      : 'The `claude` command wasn’t found on this computer’s PATH yet.');
+  const cliSteps = h('ol', { class: 'cli-steps' },
+    h('li', null, 'Install Node.js.'),
+    h('li', null, h('code', { text: 'npm install -g @anthropic-ai/claude-code' })),
+    h('li', null, 'Run ', h('code', { text: 'claude' }), ' in a terminal and sign in.'));
+
+  // ---- test connection
+  const testResult = h('p', { class: 'hint claude-test-result', role: 'status' });
+  const testBtn = h('button', { type: 'button', class: 'btn btn-sm' }, 'Test connection');
+  testBtn.addEventListener('click', async () => {
+    testBtn.disabled = true;
+    testResult.className = 'hint claude-test-result';
+    testResult.textContent = 'Testing…';
+    try {
+      const r = await api('POST', '/api/claude/test', {});
+      testResult.classList.add('is-success');
+      testResult.textContent = `Connected via ${r.via === 'cli' ? 'the Claude Code CLI' : 'your API key'}. Claude replied: "${r.text}"`;
+    } catch (err) {
+      testResult.classList.add('is-error');
+      testResult.textContent = err.message || String(err);
+    } finally {
+      testBtn.disabled = false;
+    }
+  });
+
+  // ---- only show what's relevant to the selected mode
+  const sectionsHost = h('div', { class: 'claude-mode-sections' });
+  function renderSections() {
+    const mode = modeGroup.querySelector('input:checked').value;
+    if (mode === 'off') {
+      sectionsHost.replaceChildren(); // the card header already explains what Claude help does
+    } else if (mode === 'api') {
+      sectionsHost.replaceChildren(
+        h('div', { class: 'settings-fields' }, keyField, modelField),
+        h('div', { class: 'btn-group' }, testBtn),
+        testResult);
+    } else {
+      sectionsHost.replaceChildren(
+        cliSteps,
+        cliStatus,
+        modelField,
+        h('div', { class: 'btn-group' }, testBtn),
+        testResult);
+    }
+  }
+  renderSections();
+
+  return h('section', { class: 'card', 'aria-labelledby': 'claude-title' },
+    h('div', { class: 'card-head' },
+      h('h2', { id: 'claude-title', text: 'Claude help' }),
+      h('p', { text: 'Debugging hints, explanations and code review from Claude on the Attempt editor.' })),
+    modeGroup,
+    sectionsHost);
 }
 
 // ================================================================ router
 const ROUTES = [
-  { re: /^\/today$/, nav: 'today', title: 'Today', view: viewToday },
-  { re: /^\/add$/, nav: 'add', title: 'Add problem', view: viewAdd },
+  { re: /^\/today$/, nav: 'today', title: 'Today', view: (main, ctx) => viewToday(main, { ...ctx, deck: 'main' }) },
+  { re: /^\/add(?:\?(.*))?$/, nav: 'add', title: 'Add problem', view: viewAdd },
   { re: /^\/library$/, nav: 'library', title: 'Library', view: viewLibrary },
   { re: /^\/problem\/(\d+)$/, nav: 'library', title: 'Problem', view: viewProblem },
+  { re: /^\/neetcode$/, nav: 'neetcode', title: 'NeetCode 150', view: viewNeetcode },
+  { re: /^\/neetcode\/review$/, nav: 'neetcode', title: 'NeetCode review',
+    view: (main, ctx) => viewToday(main, { ...ctx, deck: 'neetcode' }) },
   { re: /^\/settings$/, nav: 'settings', title: 'Settings', view: viewSettings },
 ];
 
@@ -2274,4 +3869,6 @@ document.getElementById('skip-link').addEventListener('click', () => {
 
 window.addEventListener('hashchange', router);
 router();
-if (!/^#\/today/.test(location.hash)) refreshSummary().catch(() => {});
+// Whichever page loaded first refreshes its own deck's summary; make sure both nav
+// badges (Today's and NeetCode's) are populated regardless of which page that was.
+refreshSummaries();

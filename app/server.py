@@ -23,6 +23,9 @@ from urllib.parse import parse_qs, urlparse
 APP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 
+import claude_help  # noqa: E402
+import neetcode  # noqa: E402
+import runner  # noqa: E402
 import scheduling as sched  # noqa: E402
 from store import Invalid, NotFound, Store, _as_float, _as_int  # noqa: E402
 
@@ -159,6 +162,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.BAD_REQUEST, {"error": str(e)})
             except NotFound as e:
                 self._json(HTTPStatus.NOT_FOUND, {"error": str(e)})
+            except claude_help.ClaudeError as e:
+                self._json(e.status, {"error": e.message})
             except (ConnectionError, TimeoutError):
                 raise
             except Exception:  # last resort: details go to the terminal window, not the browser
@@ -194,18 +199,29 @@ class Handler(BaseHTTPRequestHandler):
         store = self.store
 
         if path == "/api/summary" and method == "GET":
-            return self._json(200, store.summary())
+            return self._json(200, store.summary(scope=query.get("deck", "")))
 
         if path == "/api/queue" and method == "GET":
-            return self._json(200, store.queue(tag=query.get("tag", "")))
+            return self._json(200, store.queue(tag=query.get("tag", ""), scope=query.get("deck", "")))
 
         if path == "/api/tags" and method == "GET":
-            return self._json(200, {"tags": store.tags()})
+            return self._json(200, {"tags": store.tags(scope=query.get("deck", ""))})
+
+        if path == "/api/neetcode" and method == "GET":
+            return self._json(200, neetcode.build_tracker(store.list_problems(scope="all")))
+
+        if path == "/api/neetcode/adopt" and method == "POST":
+            data = self._body()
+            ids = data.get("problem_ids")
+            if ids is not None and not isinstance(ids, list):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "problem_ids must be a list")
+            with self.lock:
+                return self._json(200, neetcode.adopt(store, ids))
 
         if path == "/api/problems":
             if method == "GET":
                 items = store.list_problems(q=query.get("q", ""), tag=query.get("tag", ""),
-                                            status=query.get("status", ""))
+                                            status=query.get("status", ""), scope=query.get("deck", ""))
                 return self._json(200, {"problems": items})
             if method == "POST":
                 data = self._body()
@@ -217,7 +233,7 @@ class Handler(BaseHTTPRequestHandler):
                     problem = store.create_problem(data, first_rating, duration_ms)
                 return self._json(201, problem)
 
-        m = re.fullmatch(r"/api/problems/(\d+)(?:/(review|undo))?", path)
+        m = re.fullmatch(r"/api/problems/(\d+)(?:/(review|undo|draft))?", path)
         if m:
             pid, action = int(m.group(1)), m.group(2)
             if action is None and method == "GET":
@@ -239,6 +255,15 @@ class Handler(BaseHTTPRequestHandler):
                 data = self._body()
                 with self.lock:
                     return self._json(200, store.undo_last_review(pid, data.get("review_id")))
+            if action == "draft" and method == "GET":
+                return self._json(200, store.get_draft(pid))
+            # POST too: navigator.sendBeacon (used to save a draft when the tab closes) can only POST.
+            if action == "draft" and method in ("PUT", "PATCH", "POST"):
+                data = self._body()
+                if "code" not in data:
+                    raise ApiError(HTTPStatus.BAD_REQUEST, "code is required")
+                with self.lock:
+                    return self._json(200, store.save_draft(pid, data.get("code"), data.get("language")))
 
         if path == "/api/settings":
             if method == "GET":
@@ -271,6 +296,51 @@ class Handler(BaseHTTPRequestHandler):
             data = self._body()
             with self.lock:
                 return self._json(200, store.import_all(data))
+
+        if path == "/api/run" and method == "POST":
+            if not store.get_settings().get("allow_code_run", True):
+                raise ApiError(HTTPStatus.FORBIDDEN,
+                                "Running code is turned off. Turn it back on in Settings to use Run.")
+            data = self._body()
+            code = data.get("code")
+            if not isinstance(code, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "code must be text")
+            if len(code) > 100000:
+                raise ApiError(HTTPStatus.BAD_REQUEST, "code is too long (max 100000 characters)")
+            stdin = data.get("stdin") or ""
+            if not isinstance(stdin, str):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "stdin must be text")
+            # Deliberately outside self.lock: a run can take up to ~10s and doesn't
+            # touch the database, so it must never block other requests. runner's own
+            # lock (one run at a time) is what actually serializes this endpoint.
+            try:
+                result = runner.run_python(code, stdin)
+            except runner.RunInProgress:
+                raise ApiError(HTTPStatus.CONFLICT, "Another run is already in progress. Wait for it to finish.")
+            return self._json(200, result)
+
+        # ---- Ask Claude (app/claude_help.py). Deliberately outside self.lock: these
+        # do network I/O / spawn a subprocess and never touch the SQLite database.
+        if path == "/api/claude/status" and method == "GET":
+            return self._json(200, claude_help.status(store))
+
+        if path == "/api/claude/key":
+            if method == "PUT":
+                data = self._body()
+                claude_help.save_api_key(store, data.get("api_key"))
+                return self._json(200, {"ok": True})
+            if method == "DELETE":
+                self._body()
+                claude_help.delete_api_key(store)
+                return self._json(200, {"ok": True})
+
+        if path == "/api/claude/test" and method == "POST":
+            self._body()
+            return self._json(200, claude_help.test_connection(store))
+
+        if path == "/api/claude/help" and method == "POST":
+            data = self._body()
+            return self._json(200, claude_help.handle_help(store, data))
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"no API route for {method} {path}")
 

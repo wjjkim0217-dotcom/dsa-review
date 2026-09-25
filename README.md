@@ -55,6 +55,111 @@ day). Made a mistake? Hit **Undo** on the pop-up.
 Target times shown by the timer: Easy 15 min, Medium 25 min, Hard 40 min (30 min if you didn't
 set a difficulty).
 
+## Attempt editor & running code
+
+Every problem page has an **Attempt** card with a real code editor (syntax highlighting,
+auto-indent, bracket matching, undo, search – it's [CodeMirror](https://codemirror.net/), see
+`tools/codemirror/`). It autosaves what you type (about a second after you stop, and again if
+you leave the page), so you can pick a problem back up later exactly where you left it. If
+there's nothing saved yet, it starts from a small starter template.
+
+- **Run** (or `Ctrl`/`Cmd`+`Enter`) executes your code as a real Python process **on your own
+  computer** – see **Security notes** below.
+- **Input (stdin)** opens a small box for standard input, if your code calls `input()`.
+- **Reset to template** clears the editor back to the starter template (asks first).
+- **Copy** copies the code to your clipboard.
+- **Save as my solution** copies the editor's contents into this problem's saved *Solution*
+  field (asks first if one is already saved).
+
+Your code runs with a few LeetCode-style helpers already available, so you don't have to
+retype them every time:
+
+- Everything from `typing` (`List`, `Dict`, `Optional`, …), plus `collections`, `heapq`,
+  `bisect`, `math`, `itertools`, `functools`, `string`, `re`, and `cache`/`lru_cache`.
+- `ListNode` / `TreeNode` – the usual LeetCode linked-list and binary-tree node classes.
+- `build_list(values)` / `list_values(head)` – convert between a plain list and a `ListNode`
+  chain.
+- `build_tree(values)` / `tree_values(root)` – convert between LeetCode's level-order list
+  (with `None` gaps, e.g. `[3, 9, 20, None, None, 15, 7]`) and a `TreeNode` tree.
+
+A run gets 10 seconds; if it's still going, the whole process is stopped and you'll see
+"Timed out". Output is capped at 64 KB per stream. Only one run happens at a time across the
+whole app.
+
+The **Today** review card also has a collapsible **Code it here** section, so you can recode a
+problem from scratch while reviewing it without leaving the card. It always starts blank (never
+your saved draft, which would spoil the recode) and only saves to your draft if you press
+**Save to draft** – otherwise nothing about it is kept once you rate the card.
+
+You can turn code running off entirely (Settings → Code runner → *Allow running code*); you can
+still write and save attempts, just not execute them.
+
+## Claude help
+
+The Attempt editor's toolbar has an **Ask Claude** button that opens a panel below the output –
+pick Hint, Debug, Explain or Review, optionally ask something specific, and get a reply rendered
+as Markdown. It's off by default; turn it on in **Settings → Claude help**, in one of two ways:
+
+- **API key** – paste in an Anthropic Console API key (get one at
+  [platform.claude.com](https://platform.claude.com)). Each request is billed per use to that
+  Console account, separately from a Claude Pro/Max subscription. The key is saved to
+  `data/secrets.json` on your computer (not the app's database, so it's never swept up by
+  Export/Import backups), and never appears in any API response.
+- **Claude Code CLI** – if you already have the [`claude` CLI](https://claude.com/product/claude-code)
+  installed and signed in (`npm install -g @anthropic-ai/claude-code`, then run `claude` once in a
+  terminal to sign in), turn this on instead: the app runs that CLI on your computer, using
+  whatever Claude plan you're signed into. **The app never asks for, reads or stores your Claude
+  login** – it only invokes the `claude` command you've already authenticated yourself. (This
+  isn't a shortcut: Anthropic's policies don't allow third-party apps like this one to collect or
+  proxy Claude.ai credentials, so "Sign in with Claude" isn't offered here.)
+
+Either way, each request sends Claude the problem's title/difficulty/URL/prompt text, your current
+code, and your latest run's output – never your own saved *Key insight*, *Notes* or *Solution*
+(those are your spoilers, kept local). Pick a model (Haiku 4.5, Sonnet 5, or Opus 5.5) in Settings;
+Settings also has a **Test connection** button to check everything's wired up before you rely on
+it mid-review.
+
+## NeetCode 150 tracker
+
+The **NeetCode 150** page lists all 150 problems in roadmap order, grouped by pattern, with
+links to LeetCode, NeetCode's video explanation and solution, plus your progress overall, by
+difficulty, by pattern and for the Blind 75 subset.
+
+Progress comes from your library, so there's nothing extra to tick off. A NeetCode problem is
+matched to a library problem by its LeetCode link (or, failing that, its exact title):
+
+- **Not started**: not in your library.
+- **Added**: saved but not solved yet (in your new queue).
+- **Solved**: saved with a rating at least once.
+- **Mastered**: solved, and its memory strength is 21+ days.
+
+Press **Add** on a row to open *Add problem* with the title, link, difficulty and tags
+(`<pattern>`, `neetcode-150`, `blind-75`) already filled in. Solve it, write your key insight,
+pick how it went, and save.
+
+### The NeetCode deck and its own review session
+
+NeetCode 150 problems live in a **separate deck** from your main library, with its own
+independent review schedule, its own daily "new problems" limit, and its own review session at
+**NeetCode → Start review** (or `#/neetcode/review`). Problems you add from the NeetCode 150
+page go straight into this deck; anything you add from **Add problem** with **Deck: Main
+library** stays out of it (and out of the NeetCode 150 tracker, which only counts NeetCode-deck
+problems as progress).
+
+- **Moving problems you already added.** If you'd already saved a NeetCode 150 problem to your
+  main library before this existed, the NeetCode page shows a banner ("N problems in your main
+  library are NeetCode 150 problems") with a **Move to NeetCode** button. It moves them into the
+  NeetCode deck and tags them, without touching their schedule or review history.
+- **Showing NeetCode problems on the main Today page too.** By default the two decks are
+  entirely separate — the main Today page and Library only show the main deck. If you'd rather
+  see everything in one place, turn on **Settings → NeetCode deck → "Show NeetCode problems on
+  the main Today page and Library"**. With it on, due and new NeetCode problems also show up in
+  your regular Today session and Library (in addition to still having their own
+  `#/neetcode/review` session); the Library also has a Main/NeetCode/Both filter regardless of
+  this setting.
+- Every problem's edit form and detail page show which deck it's in, and let you move it between
+  decks directly (moving a problem never changes its schedule).
+
 ## How the scheduling works
 
 The app uses **FSRS-6** (Free Spaced Repetition Scheduler), the algorithm behind Anki's modern
@@ -109,6 +214,8 @@ shows the old and new gaps and asks before changing anything. You can undo it wi
   **Import backup** merges one back in and skips problems you already have. It brings back
   problems and their review history, not your settings, so re-check the Settings page after
   moving to a new computer (and run `optimize.py` again if you had personalized the scheduler).
+- Your Claude API key (if you saved one) lives in `data/secrets.json`, separately from the
+  database. It's never included in a backup export, so re-enter it after moving to a new computer.
 
 ## Handy commands
 
@@ -121,7 +228,7 @@ Run these from this folder in Command Prompt or PowerShell:
 ```
 
 The first uses a different port, the second doesn't open a browser tab, and the third runs the
-test suite (330+ tests).
+test suite (400+ tests).
 
 ## Security notes
 
@@ -136,6 +243,20 @@ The app is a local web server, so it's built to stay local:
 - Links must be `http(s)`, so a saved link can't run JavaScript.
 - Only web files (HTML, CSS, JS, images and the like) inside `app/static` are served, so
   path-traversal requests get a 404.
+- **The Attempt editor's Run button executes code on your own computer**, as your own user
+  account, with no sandbox – that's the whole point (it needs to import real modules, read
+  `stdin`, etc.), but it does mean you should treat it like running any other script: don't
+  paste in code you don't trust. It's only reachable from this app's own page (the same
+  Origin/Host/Content-Type checks as every other write request protect it too), it stops
+  itself after 10 seconds, and you can turn it off entirely in Settings.
+- **Ask Claude is off by default** and only ever talks to Anthropic's own API (`api.anthropic.com`)
+  or a `claude` binary already on your computer – never any other host, and the page's
+  Content-Security-Policy (`connect-src 'self'`) means the *browser* itself can only ever call
+  this app's own server, not any external API directly. In API mode, your key lives in
+  `data/secrets.json` (`chmod 600` on macOS/Linux), separate from the database, and is never
+  included in any response, export or log line. In CLI mode, the app never reads or stores the
+  `claude` CLI's own credentials, and never asks you for a Claude.ai password, cookie or session
+  token – see **Claude help** above.
 
 ## Project layout
 
@@ -144,12 +265,19 @@ run.bat / run.sh        launchers (set up .venv on first run)
 requirements.txt        fsrs==6.3.2
 optimize.py             optional FSRS parameter fitting
 app/server.py           HTTP server + JSON API (standard library only)
-app/store.py            SQLite storage, queue, stats, backup/import
+app/store.py            SQLite storage, queue, stats, backup/import, drafts
+app/runner.py           runs Attempt-editor code as a local Python process (POST /api/run)
+app/claude_help.py      "Ask Claude" debugging help (API key or Claude Code CLI, see above)
 app/scheduling.py       FSRS-6 wrapper with the coding-problem tweaks above
+app/neetcode.py         NeetCode 150 tracker (matches the list against your library)
+app/neetcode150.json    the NeetCode 150 list (from github.com/neetcode-gh/leetcode)
 app/static/             the web page (HTML/CSS/JS, no external dependencies)
+app/static/vendor/      the vendored CodeMirror editor bundle (see tools/codemirror/build.md)
+tools/codemirror/       source + build script for the vendored editor bundle (Node/npm; only
+                        needed to rebuild it, not to run the app)
 docs/API.md             API reference
 tests/                  unittest suite
-data/                   your database and backups (created on first run)
+data/                   your database, backups, and secrets.json (Claude API key), created on first run
 ```
 
 ## Troubleshooting

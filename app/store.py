@@ -18,8 +18,11 @@ from pathlib import Path
 import scheduling as sched
 from scheduling import Card, ReviewLog, Rating, SchedulerSettings
 
-SCHEMA_VERSION = 2   # 2 = cards use the study-day clock (see scheduling.py)
+SCHEMA_VERSION = 4   # 2 = study-day clock; 3 = adds problems.deck; 4 = adds drafts table
+DRAFT_CODE_LIMIT = 100000
 DIFFICULTIES = ("", "Easy", "Medium", "Hard")
+DECKS = ("main", "neetcode")
+DECK_ORDER = ("main", "neetcode")   # order new problems / results are combined in
 TEXT_LIMITS = {
     "title": 200, "url": 2000, "source": 100, "prompt": 20000,
     "insight": 1000, "notes": 50000, "solution": 100000, "language": 40,
@@ -28,9 +31,14 @@ DEFAULT_SETTINGS = {
     "desired_retention": 0.90,   # FSRS target: chance you still remember when it comes back
     "maximum_interval": 60,      # days
     "again_next_day": True,      # "Again" always comes back tomorrow
-    "new_per_day": 3,            # unsolved problems introduced per day
+    "new_per_day": 3,            # unsolved problems introduced per day (main deck)
     "day_starts_at": 4,          # local hour when a new "day" begins (like Anki)
     "fsrs_parameters": None,     # None = FSRS-6 defaults; a list of 21 numbers from optimize.py
+    "neetcode_in_main": False,   # also show the NeetCode deck on the main Today page / Library
+    "neetcode_new_per_day": 3,   # unsolved NeetCode problems introduced per day
+    "allow_code_run": True,      # let the Attempt editor's Run button execute code on this computer
+    "claude_mode": "off",        # "off" | "api" | "cli" - see app/claude_help.py
+    "claude_model": "sonnet",    # "haiku" | "sonnet" | "opus" - used by both claude_mode "api" and "cli"
 }
 
 SCHEMA = """
@@ -48,6 +56,7 @@ CREATE TABLE IF NOT EXISTS problems (
     solution    TEXT NOT NULL DEFAULT '',
     language    TEXT NOT NULL DEFAULT 'python',
     suspended   INTEGER NOT NULL DEFAULT 0,
+    deck        TEXT NOT NULL DEFAULT 'main',
     card        TEXT NOT NULL,
     due         TEXT NOT NULL,
     created_at  TEXT NOT NULL,
@@ -68,6 +77,12 @@ CREATE INDEX IF NOT EXISTS idx_reviews_problem ON reviews(problem_id, reviewed_a
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS drafts (
+    problem_id INTEGER PRIMARY KEY REFERENCES problems(id) ON DELETE CASCADE,
+    code       TEXT NOT NULL,
+    language   TEXT NOT NULL DEFAULT 'python',
+    updated_at TEXT NOT NULL
 );
 """
 
@@ -173,6 +188,11 @@ class Store:
             if version < 2 and c.execute("SELECT 1 FROM reviews LIMIT 1").fetchone():
                 # Older databases stored real timestamps in the FSRS cards: replay them.
                 self._reschedule_all(c, self.scheduler_settings(self._settings_from(c)))
+            # Idempotent column migration (checked by name, not by version, so it's safe
+            # even if user_version and the actual schema ever get out of step).
+            cols = {row["name"] for row in c.execute("PRAGMA table_info(problems)")}
+            if "deck" not in cols:
+                c.execute("ALTER TABLE problems ADD COLUMN deck TEXT NOT NULL DEFAULT 'main'")
             if version != SCHEMA_VERSION:
                 c.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
@@ -250,6 +270,13 @@ class Store:
         new["new_per_day"] = _as_int(new["new_per_day"], "new_per_day", 0, 100)
         new["day_starts_at"] = _as_int(new["day_starts_at"], "day_starts_at", 0, 23)
         new["again_next_day"] = _as_bool(new["again_next_day"], "again_next_day")
+        new["neetcode_in_main"] = _as_bool(new["neetcode_in_main"], "neetcode_in_main")
+        new["neetcode_new_per_day"] = _as_int(new["neetcode_new_per_day"], "neetcode_new_per_day", 0, 100)
+        new["allow_code_run"] = _as_bool(new["allow_code_run"], "allow_code_run")
+        if new["claude_mode"] not in ("off", "api", "cli"):
+            raise Invalid("claude_mode must be 'off', 'api' or 'cli'")
+        if new["claude_model"] not in ("haiku", "sonnet", "opus"):
+            raise Invalid("claude_model must be 'haiku', 'sonnet' or 'opus'")
         if new["fsrs_parameters"] is not None:
             try:
                 new["fsrs_parameters"] = list(sched.validate_parameters(new["fsrs_parameters"]))
@@ -286,7 +313,7 @@ class Store:
 
     # ------------------------------------------------------------------ validation
     def _clean(self, data: dict, partial: bool) -> dict:
-        allowed = set(TEXT_LIMITS) | {"difficulty", "tags", "suspended"}
+        allowed = set(TEXT_LIMITS) | {"difficulty", "tags", "suspended", "deck"}
         unknown = set(data) - allowed
         if unknown:
             raise Invalid(f"unknown field(s): {', '.join(sorted(unknown))}")
@@ -332,6 +359,11 @@ class Store:
             out["tags"] = json.dumps(seen[:20])
         if "suspended" in data:
             out["suspended"] = 1 if _as_bool(data["suspended"], "suspended") else 0
+        if "deck" in data:
+            deck = data["deck"]
+            if deck not in DECKS:
+                raise Invalid("deck must be 'main' or 'neetcode'")
+            out["deck"] = deck
         if "language" in out and not out["language"]:
             out["language"] = "python"
         return out
@@ -366,6 +398,7 @@ class Store:
             "solution": row["solution"],
             "language": row["language"],
             "suspended": bool(row["suspended"]),
+            "deck": row["deck"],
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
             "status": status,
@@ -401,16 +434,36 @@ class Store:
             }
         return out
 
+    # ------------------------------------------------------------------ scope
+    def _scope_decks(self, scope: str, settings: dict) -> tuple[str, ...]:
+        """Turn a `deck` query param + the current settings into the set of decks to include.
+
+        '' / 'main' (the default) is the main deck, plus the NeetCode deck when the
+        "show NeetCode on main Today/Library" setting is on. 'neetcode' is NeetCode
+        only. 'all' is everything, regardless of that setting.
+        """
+        if scope in ("", "main"):
+            decks = ["main"]
+            if settings.get("neetcode_in_main"):
+                decks.append("neetcode")
+            return tuple(decks)
+        if scope == "neetcode":
+            return ("neetcode",)
+        if scope == "all":
+            return DECK_ORDER
+        raise Invalid("deck must be one of: main, neetcode, all")
+
     # ------------------------------------------------------------------ queries
-    def list_problems(self, q: str = "", tag: str = "", status: str = "") -> list[dict]:
+    def list_problems(self, q: str = "", tag: str = "", status: str = "", scope: str = "") -> list[dict]:
         settings = self.get_settings()
         ss = self.scheduler_settings(settings)
+        decks = self._scope_decks(scope, settings)
         now = sched.utcnow()
         today = sched.study_date(now, ss.day_starts_at)
         with self.conn() as c:
             stats = self._stats_by_problem(c)
             rows = c.execute("SELECT * FROM problems ORDER BY due ASC, id ASC").fetchall()
-        items = [self._row_to_problem(r, stats, ss, today, now) for r in rows]
+        items = [self._row_to_problem(r, stats, ss, today, now) for r in rows if r["deck"] in decks]
         if status not in STATUSES:
             raise Invalid("status must be one of: new, due, scheduled, suspended")
         if q:
@@ -458,52 +511,94 @@ class Store:
         problem["preview"] = sched.preview(sched.card_from_json(row["card"]), ss, now)
         return problem
 
-    def tags(self) -> list[dict]:
+    def tags(self, scope: str = "") -> list[dict]:
+        settings = self.get_settings()
+        decks = self._scope_decks(scope, settings)
         counts: dict[str, int] = {}
         with self.conn() as c:
-            for row in c.execute("SELECT tags FROM problems"):
+            for row in c.execute("SELECT tags, deck FROM problems"):
+                if row["deck"] not in decks:
+                    continue
                 for t in json.loads(row["tags"]):
                     counts[t] = counts.get(t, 0) + 1
         return [{"tag": t, "count": n} for t, n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
 
-    def queue(self, tag: str = "") -> dict:
-        """Problems to work on today: due reviews (weakest memory first), then new ones."""
+    def queue(self, tag: str = "", scope: str = "") -> dict:
+        """Problems to work on today: due reviews (weakest memory first), then new ones.
+
+        Each deck has its own daily new-problem limit and its own "introduced today"
+        count, so introducing a new NeetCode problem never eats into the main deck's
+        limit (and vice versa). New problems are returned main-deck first, then
+        NeetCode, each capped at its own limit.
+        """
         settings = self.get_settings()
+        decks = self._scope_decks(scope, settings)
         now = sched.utcnow()
         day_start, day_end = self.day_bounds(now, settings)
-        items = self.list_problems(tag=tag)
+        items = self.list_problems(tag=tag, scope=scope)
         due = [p for p in items if p["status"] == "due"]
         # Lowest predicted recall first; ties broken by most overdue.
         due.sort(key=lambda p: (p["retrievability"] if p["retrievability"] is not None else 0,
                                 p["due"] or ""))
+
+        limits = {"main": int(settings["new_per_day"]), "neetcode": int(settings["neetcode_new_per_day"])}
+        new_by_deck = {
+            d: sorted((p for p in items if p["status"] == "new" and p["deck"] == d), key=lambda p: p["id"])
+            for d in DECK_ORDER
+        }
         with self.conn() as c:
             # Only count problems that came out of the "new" queue, not ones you added
             # right after solving them. (Parsed in Python: older SQLite builds lack JSON functions.)
-            introduced_today = sum(
-                1 for (before,) in c.execute(
-                    "SELECT card_before FROM reviews WHERE kind = 'review' "
-                    "AND reviewed_at >= ? AND reviewed_at < ?",
-                    (_iso(day_start), _iso(day_end)),
+            introduced = {}
+            for d in decks:
+                introduced[d] = sum(
+                    1 for (before,) in c.execute(
+                        "SELECT r.card_before FROM reviews r JOIN problems p ON p.id = r.problem_id "
+                        "WHERE r.kind = 'review' AND p.deck = ? AND r.reviewed_at >= ? AND r.reviewed_at < ?",
+                        (d, _iso(day_start), _iso(day_end)),
+                    )
+                    if json.loads(before).get("last_review") is None
                 )
-                if json.loads(before).get("last_review") is None
-            )
-        new_left = max(0, int(settings["new_per_day"]) - introduced_today)
-        new_all = sorted((p for p in items if p["status"] == "new"), key=lambda p: p["id"])
+
+        new_out, new_left_total, new_waiting_total, introduced_total = [], 0, 0, 0
+        for d in DECK_ORDER:
+            if d not in decks:
+                continue
+            left = max(0, limits[d] - introduced[d])
+            pool = new_by_deck[d]
+            new_out.extend(pool[:left])
+            new_left_total += left
+            new_waiting_total += len(pool)
+            introduced_total += introduced[d]
+
         return {
             "due": due,
-            "new": new_all[:new_left],
-            "new_waiting": len(new_all),
-            "new_left_today": new_left,
-            "new_introduced_today": introduced_today,
+            "new": new_out,
+            "new_waiting": new_waiting_total,
+            "new_left_today": new_left_total,
+            "new_introduced_today": introduced_total,
         }
 
-    def summary(self) -> dict:
+    def summary(self, scope: str = "") -> dict:
         settings = self.get_settings()
+        decks = self._scope_decks(scope, settings)
         now = sched.utcnow()
         day_start, day_end = self.day_bounds(now, settings)
         local_start, _ = self._local_day(now, settings)
-        items = self.list_problems()
+        all_items = self.list_problems(scope="all")
+        items = [p for p in all_items if p["deck"] in decks]
         active = [p for p in items if not p["suspended"]]
+
+        # deck_counts: always over ALL active problems, regardless of scope/toggle,
+        # so the nav can show a per-deck badge no matter which page you're on.
+        deck_counts = {d: {"total": 0, "due": 0, "new": 0} for d in DECK_ORDER}
+        for p in all_items:
+            if p["suspended"]:
+                continue
+            dc = deck_counts[p["deck"]]
+            dc["total"] += 1
+            if p["status"] in ("due", "new"):
+                dc[p["status"]] += 1
 
         # 14-day forecast of reviews by study day (day 0 = today, includes overdue).
         forecast = []
@@ -513,25 +608,30 @@ class Store:
             forecast.append({"date": (local_start + timedelta(days=i)).date().isoformat(),
                              "count": count})
 
+        placeholders = ",".join("?" for _ in decks)
         with self.conn() as c:
             reviewed_today = c.execute(
-                "SELECT COUNT(*) FROM reviews WHERE reviewed_at >= ? AND reviewed_at < ?",
-                (_iso(day_start), _iso(day_end)),
+                f"SELECT COUNT(*) FROM reviews r JOIN problems p ON p.id = r.problem_id "
+                f"WHERE p.deck IN ({placeholders}) AND r.reviewed_at >= ? AND r.reviewed_at < ?",
+                (*decks, _iso(day_start), _iso(day_end)),
             ).fetchone()[0]
             # Review days, bucketed by study day, for the streak.
             days = set()
             offset = timedelta(hours=int(settings["day_starts_at"]))
-            for (ts,) in c.execute("SELECT reviewed_at FROM reviews"):
+            for (ts,) in c.execute(
+                f"SELECT r.reviewed_at FROM reviews r JOIN problems p ON p.id = r.problem_id "
+                f"WHERE p.deck IN ({placeholders})", decks,
+            ):
                 days.add((_naive_local(datetime.fromisoformat(ts)) - offset).date())
             # Success rate on non-first reviews in the last 30 days.
             since = _iso(now - timedelta(days=30))
             rows = c.execute(
-                """SELECT r.rating FROM reviews r
-                   WHERE r.reviewed_at >= ?
-                     AND EXISTS (SELECT 1 FROM reviews p WHERE p.problem_id = r.problem_id
-                                 AND (p.reviewed_at < r.reviewed_at
-                                      OR (p.reviewed_at = r.reviewed_at AND p.id < r.id)))""",
-                (since,),
+                f"""SELECT r.rating FROM reviews r JOIN problems p ON p.id = r.problem_id
+                   WHERE p.deck IN ({placeholders}) AND r.reviewed_at >= ?
+                     AND EXISTS (SELECT 1 FROM reviews pr WHERE pr.problem_id = r.problem_id
+                                 AND (pr.reviewed_at < r.reviewed_at
+                                      OR (pr.reviewed_at = r.reviewed_at AND pr.id < r.id)))""",
+                (*decks, since),
             ).fetchall()
         today = local_start.date()
         streak, d = 0, today
@@ -560,6 +660,7 @@ class Store:
             "reviews_30d": len(rows),
             "forecast": forecast,
             "settings": settings,
+            "deck_counts": deck_counts,
         }
 
     # ------------------------------------------------------------------ mutations
@@ -577,6 +678,7 @@ class Store:
         now = sched.utcnow()
         card = sched.new_card()
         fields.setdefault("language", "python")
+        fields.setdefault("deck", "main")
         fields["uid"] = str(uuid.uuid4())
         fields["card"] = sched.card_to_json(card)
         fields["due"] = _iso(card.due)
@@ -603,6 +705,39 @@ class Store:
             if cur.rowcount == 0:
                 raise NotFound(f"problem {pid} not found")
         return self.get_problem(pid)
+
+    # ------------------------------------------------------------------ drafts
+    def get_draft(self, pid: int) -> dict:
+        with self.conn() as c:
+            if not c.execute("SELECT 1 FROM problems WHERE id = ?", (pid,)).fetchone():
+                raise NotFound(f"problem {pid} not found")
+            row = c.execute(
+                "SELECT code, language, updated_at FROM drafts WHERE problem_id = ?", (pid,)
+            ).fetchone()
+        if not row:
+            return {"code": "", "language": "python", "updated_at": None}
+        return {"code": row["code"], "language": row["language"], "updated_at": row["updated_at"]}
+
+    def save_draft(self, pid: int, code, language=None) -> dict:
+        if not isinstance(code, str):
+            raise Invalid("code must be text")
+        if len(code) > DRAFT_CODE_LIMIT:
+            raise Invalid(f"code is too long (max {DRAFT_CODE_LIMIT} characters)")
+        if language is None or language == "":
+            language = "python"
+        if not isinstance(language, str) or len(language) > TEXT_LIMITS["language"]:
+            raise Invalid("language must be text")
+        now = _iso(sched.utcnow())
+        with self.conn() as c:
+            if not c.execute("SELECT 1 FROM problems WHERE id = ?", (pid,)).fetchone():
+                raise NotFound(f"problem {pid} not found")
+            c.execute(
+                "INSERT INTO drafts(problem_id, code, language, updated_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(problem_id) DO UPDATE SET code = excluded.code, "
+                "language = excluded.language, updated_at = excluded.updated_at",
+                (pid, code, language.strip(), now),
+            )
+        return {"code": code, "language": language.strip(), "updated_at": now}
 
     def delete_problem(self, pid: int) -> None:
         with self.conn() as c:
@@ -702,6 +837,7 @@ class Store:
         with self.conn() as c:
             problems = [dict(r) for r in c.execute("SELECT * FROM problems ORDER BY id")]
             reviews = [dict(r) for r in c.execute("SELECT * FROM reviews ORDER BY id")]
+            drafts = [dict(r) for r in c.execute("SELECT * FROM drafts ORDER BY problem_id")]
         uid_by_id = {p["id"]: p["uid"] for p in problems}
         for p in problems:
             p["tags"] = json.loads(p["tags"])
@@ -712,6 +848,8 @@ class Store:
             r["card_before"] = json.loads(r["card_before"])
             r["card_after"] = json.loads(r["card_after"])
             r.pop("id")
+        for d in drafts:
+            d["problem_uid"] = uid_by_id[d.pop("problem_id")]
         return {
             "app": "dsa-review",
             "schema_version": SCHEMA_VERSION,
@@ -719,6 +857,7 @@ class Store:
             "settings": self.get_settings(),
             "problems": problems,
             "reviews": reviews,
+            "drafts": drafts,
         }
 
     def import_all(self, payload: dict) -> dict:
@@ -730,8 +869,9 @@ class Store:
             raise Invalid("this doesn't look like a dsa-review backup file")
         problems = payload.get("problems") or []
         reviews = payload.get("reviews") or []
-        if not isinstance(problems, list) or not isinstance(reviews, list):
-            raise Invalid("backup file is malformed (problems/reviews must be lists)")
+        drafts = payload.get("drafts") or []   # absent in backups made before drafts existed
+        if not isinstance(problems, list) or not isinstance(reviews, list) or not isinstance(drafts, list):
+            raise Invalid("backup file is malformed (problems/reviews/drafts must be lists)")
         added = skipped = 0
         with self.conn() as c:
             existing = {r["uid"] for r in c.execute("SELECT uid FROM problems")}
@@ -743,8 +883,9 @@ class Store:
                         skipped += 1
                         continue
                     fields = self._clean({k: p[k] for k in
-                                          (*TEXT_LIMITS, "difficulty", "tags", "suspended") if k in p},
+                                          (*TEXT_LIMITS, "difficulty", "tags", "suspended", "deck") if k in p},
                                          partial=False)
+                    fields.setdefault("deck", "main")
                     card = self._card_from_backup(p["card"], 0)
                     now_iso = _iso(sched.utcnow())
                     fields.update(uid=uid, due=_iso(card.due),
@@ -785,6 +926,26 @@ class Store:
                     "VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (pid, rating, _iso(reviewed_at), duration, sched.card_to_json(before),
                      sched.card_to_json(after), "added" if r.get("kind") == "added" else "review"),
+                )
+            for d in drafts:
+                try:
+                    pid = id_by_uid.get(d.get("problem_uid"))
+                    if pid is None:
+                        continue
+                    code = d.get("code")
+                    if not isinstance(code, str) or len(code) > DRAFT_CODE_LIMIT:
+                        continue
+                    language = d.get("language") or "python"
+                    if not isinstance(language, str):
+                        language = "python"
+                    updated_at = _iso(sched.parse_dt(d["updated_at"])) if d.get("updated_at") else _iso(sched.utcnow())
+                except (KeyError, TypeError, ValueError, AttributeError, OverflowError):
+                    continue  # a bad draft entry only loses that entry, not the problem
+                c.execute(
+                    "INSERT INTO drafts(problem_id, code, language, updated_at) VALUES (?, ?, ?, ?) "
+                    "ON CONFLICT(problem_id) DO UPDATE SET code = excluded.code, "
+                    "language = excluded.language, updated_at = excluded.updated_at",
+                    (pid, code, language.strip()[:TEXT_LIMITS["language"]] or "python", updated_at),
                 )
             # Backups from an older version, or made with different scheduling settings,
             # get their schedules recomputed with this computer's settings.

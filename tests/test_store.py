@@ -378,6 +378,36 @@ class ValidationTest(StoreTestCase):
         self.assertInvalid({"title": "T" * 201})
         self.assertEqual(count_rows(self.db_path, "problems"), 1)
 
+    def test_deck_defaults_to_main(self):
+        self.assertEqual(self.add("T")["deck"], "main")
+
+    def test_deck_accepted_on_create(self):
+        self.assertEqual(self.add("T", deck="neetcode")["deck"], "neetcode")
+        self.assertEqual(self.add("T", deck="main")["deck"], "main")
+
+    def test_deck_rejected_on_create(self):
+        for bad in ("", "Main", "NEETCODE", "other", None, 5, ["main"]):
+            with self.subTest(bad=bad):
+                self.assertInvalid({"title": "T", "deck": bad}, msg="deck must be")
+
+    def test_deck_accepted_on_update(self):
+        p = self.store.update_problem(self.pid, {"deck": "neetcode"})
+        self.assertEqual(p["deck"], "neetcode")
+        p = self.store.update_problem(self.pid, {"deck": "main"})
+        self.assertEqual(p["deck"], "main")
+
+    def test_deck_rejected_on_update(self):
+        self.assertInvalid({"deck": "bogus"}, partial=True, msg="deck must be")
+        self.assertEqual(self.store.get_problem(self.pid)["deck"], "main")
+
+    def test_changing_deck_does_not_touch_scheduling(self):
+        pid = self.add("T", first_rating=3)["id"]
+        before = self.store.get_problem(pid)
+        self.store.update_problem(pid, {"deck": "neetcode"})
+        after = self.store.get_problem(pid)
+        for key in ("due", "due_date", "stability", "fsrs_difficulty", "reps", "lapses"):
+            self.assertEqual(before[key], after[key])
+
 
 # ============================================================================ update / suspend / delete
 class UpdateProblemTest(FrozenStoreTestCase):
@@ -486,6 +516,62 @@ class DeleteProblemTest(FrozenStoreTestCase):
         pid = self.add("A")["id"]
         self.store.delete_problem(pid)
         self.assertGreater(self.add("B")["id"], pid)
+
+
+# ============================================================================ drafts
+class DraftTest(FrozenStoreTestCase):
+    def test_empty_draft_by_default(self):
+        pid = self.add("A")["id"]
+        d = self.store.get_draft(pid)
+        self.assertEqual(d, {"code": "", "language": "python", "updated_at": None})
+
+    def test_save_and_get_round_trip(self):
+        pid = self.add("A")["id"]
+        saved = self.store.save_draft(pid, "print('hi')", "python")
+        self.assertEqual(saved["code"], "print('hi')")
+        self.assertEqual(saved["language"], "python")
+        self.assertIsNotNone(saved["updated_at"])
+        got = self.store.get_draft(pid)
+        self.assertEqual(got, saved)
+
+    def test_save_overwrites_previous_draft(self):
+        pid = self.add("A")["id"]
+        self.store.save_draft(pid, "first")
+        self.store.save_draft(pid, "second")
+        self.assertEqual(self.store.get_draft(pid)["code"], "second")
+        self.assertEqual(count_rows(self.db_path, "drafts"), 1)
+
+    def test_language_defaults_to_python(self):
+        pid = self.add("A")["id"]
+        saved = self.store.save_draft(pid, "x = 1", "")
+        self.assertEqual(saved["language"], "python")
+        saved2 = self.store.save_draft(pid, "x = 1", None)
+        self.assertEqual(saved2["language"], "python")
+
+    def test_code_over_limit_is_rejected(self):
+        pid = self.add("A")["id"]
+        with self.assertRaises(Invalid):
+            self.store.save_draft(pid, "x" * 100001)
+        # exactly at the limit is fine
+        self.store.save_draft(pid, "x" * 100000)
+
+    def test_non_string_code_is_rejected(self):
+        pid = self.add("A")["id"]
+        with self.assertRaises(Invalid):
+            self.store.save_draft(pid, 12345)
+
+    def test_unknown_problem_raises_not_found(self):
+        with self.assertRaises(NotFound):
+            self.store.get_draft(99999)
+        with self.assertRaises(NotFound):
+            self.store.save_draft(99999, "code")
+
+    def test_delete_problem_cascades_draft(self):
+        pid = self.add("A")["id"]
+        self.store.save_draft(pid, "print(1)")
+        self.assertEqual(count_rows(self.db_path, "drafts"), 1)
+        self.store.delete_problem(pid)
+        self.assertEqual(count_rows(self.db_path, "drafts"), 0)
 
 
 # ============================================================================ review / undo
@@ -729,6 +815,53 @@ class ListProblemsTest(FrozenStoreTestCase):
         self.assertTrue(0 < p["retrievability"] < 0.9)
 
 
+# ============================================================================ deck scope
+class DeckScopeTest(FrozenStoreTestCase):
+    def setUp(self):
+        super().setUp()
+        self.main1 = self.add("Main One", tags=["arrays"])["id"]
+        self.main2 = self.add("Main Two", tags=["graphs"])["id"]
+        self.nc1 = self.add("NC One", tags=["arrays"], deck="neetcode")["id"]
+        self.nc2 = self.add("NC Two", tags=["dp"], deck="neetcode")["id"]
+
+    def ids(self, **kw):
+        return {p["id"] for p in self.store.list_problems(**kw)}
+
+    def test_default_scope_is_main_only(self):
+        self.assertEqual(self.ids(), {self.main1, self.main2})
+
+    def test_neetcode_scope(self):
+        self.assertEqual(self.ids(scope="neetcode"), {self.nc1, self.nc2})
+
+    def test_all_scope(self):
+        self.assertEqual(self.ids(scope="all"), {self.main1, self.main2, self.nc1, self.nc2})
+
+    def test_invalid_scope_raises(self):
+        with self.assertRaises(Invalid):
+            self.store.list_problems(scope="bogus")
+        with self.assertRaises(Invalid):
+            self.store.queue(scope="bogus")
+        with self.assertRaises(Invalid):
+            self.store.summary(scope="bogus")
+        with self.assertRaises(Invalid):
+            self.store.tags(scope="bogus")
+
+    def test_toggle_adds_neetcode_to_main_scope(self):
+        self.assertEqual(self.ids(), {self.main1, self.main2})
+        self.store.update_settings({"neetcode_in_main": True})
+        self.assertEqual(self.ids(), {self.main1, self.main2, self.nc1, self.nc2})
+        # explicit neetcode/all scopes are unaffected by the toggle
+        self.assertEqual(self.ids(scope="neetcode"), {self.nc1, self.nc2})
+        self.assertEqual(self.ids(scope="all"), {self.main1, self.main2, self.nc1, self.nc2})
+
+    def test_tags_respect_scope(self):
+        self.assertEqual({t["tag"] for t in self.store.tags()}, {"arrays", "graphs"})
+        self.assertEqual({t["tag"] for t in self.store.tags(scope="neetcode")}, {"arrays", "dp"})
+        self.assertEqual({t["tag"] for t in self.store.tags(scope="all")}, {"arrays", "graphs", "dp"})
+        self.store.update_settings({"neetcode_in_main": True})
+        self.assertEqual({t["tag"] for t in self.store.tags()}, {"arrays", "graphs", "dp"})
+
+
 # ============================================================================ queue
 class QueueTest(FrozenStoreTestCase):
     def test_empty(self):
@@ -855,6 +988,62 @@ class QueueTest(FrozenStoreTestCase):
         self.assertEqual(q["new_waiting"], 1)
         self.assertEqual(len(self.store.queue()["due"]), 2)
 
+    # -------------------------------------------------------------- deck-aware queue
+    def test_neetcode_scope_uses_its_own_limit(self):
+        main_ids = [self.add(f"M{i}")["id"] for i in range(4)]
+        nc_ids = [self.add(f"N{i}", deck="neetcode")["id"] for i in range(5)]
+        self.store.update_settings({"neetcode_new_per_day": 2})
+        q = self.store.queue(scope="neetcode")
+        self.assertEqual([p["id"] for p in q["new"]], nc_ids[:2])
+        self.assertEqual((q["new_waiting"], q["new_left_today"], q["new_introduced_today"]), (5, 2, 0))
+        # main-scope queue is unaffected
+        q_main = self.store.queue()
+        self.assertEqual([p["id"] for p in q_main["new"]], main_ids[:3])
+
+    def test_introducing_neetcode_new_does_not_touch_main_limit(self):
+        main_ids = [self.add(f"M{i}")["id"] for i in range(4)]
+        nc_ids = [self.add(f"N{i}", deck="neetcode")["id"] for i in range(4)]
+        self.store.review_problem(nc_ids[0], 3)
+        self.assertEqual(self.store.queue()["new_introduced_today"], 0)
+        self.assertEqual([p["id"] for p in self.store.queue()["new"]], main_ids[:3])
+        self.assertEqual(self.store.queue(scope="neetcode")["new_introduced_today"], 1)
+
+    def test_introducing_main_new_does_not_touch_neetcode_limit(self):
+        main_ids = [self.add(f"M{i}")["id"] for i in range(4)]
+        self.add("N0", deck="neetcode")
+        self.store.review_problem(main_ids[0], 3)
+        self.assertEqual(self.store.queue()["new_introduced_today"], 1)
+        self.assertEqual(self.store.queue(scope="neetcode")["new_introduced_today"], 0)
+
+    def test_combined_queue_with_toggle_on_orders_main_then_neetcode(self):
+        main_ids = [self.add(f"M{i}")["id"] for i in range(2)]
+        nc_ids = [self.add(f"N{i}", deck="neetcode")["id"] for i in range(2)]
+        self.store.update_settings({"neetcode_in_main": True, "new_per_day": 1,
+                                    "neetcode_new_per_day": 1})
+        q = self.store.queue()
+        self.assertEqual([p["id"] for p in q["new"]], [main_ids[0], nc_ids[0]])
+        self.assertEqual((q["new_waiting"], q["new_left_today"]), (4, 2))
+
+    def test_combined_queue_due_sorted_together(self):
+        m = self.add("M", first_rating=3)["id"]
+        n = self.add("N", deck="neetcode", first_rating=3)["id"]
+        set_card(self.db_path, m, review_state_card(last_review=ANCHOR - 20 * DAY, stability=2.0,
+                                                     due=ANCHOR - DAY))
+        set_card(self.db_path, n, review_state_card(last_review=ANCHOR - 3 * DAY, stability=3.0,
+                                                     due=ANCHOR - 2 * DAY))
+        self.store.update_settings({"neetcode_in_main": True})
+        due_ids = [p["id"] for p in self.store.queue()["due"]]
+        self.assertEqual(set(due_ids), {m, n})
+        # weakest recall first, across both decks
+        rs = [p["retrievability"] for p in self.store.queue()["due"]]
+        self.assertEqual(rs, sorted(rs))
+
+    def test_all_scope_behaves_like_main_with_toggle_on(self):
+        main_ids = [self.add(f"M{i}")["id"] for i in range(2)]
+        nc_ids = [self.add(f"N{i}", deck="neetcode")["id"] for i in range(2)]
+        q_all = self.store.queue(scope="all")
+        self.assertEqual({p["id"] for p in q_all["new"]}, {*main_ids, *nc_ids})
+
 
 # ============================================================================ day math
 class DayBoundsTest(StoreTestCase):
@@ -924,7 +1113,8 @@ class SummaryTest(FrozenStoreTestCase):
     def test_empty_shape(self):
         s = self.store.summary()
         self.assertEqual(set(s), {"now", "day_start", "day_end", "today", "counts", "streak_days",
-                                  "recall_rate_30d", "reviews_30d", "forecast", "settings"})
+                                  "recall_rate_30d", "reviews_30d", "forecast", "settings",
+                                  "deck_counts"})
         self.assertEqual(s["now"], NOW.isoformat())
         self.assertEqual(s["today"], TODAY.isoformat())
         start, end = self.store.day_bounds(NOW)
@@ -1058,6 +1248,53 @@ class SummaryTest(FrozenStoreTestCase):
         self.store.review_problem(self.pid, 1)
         self.assertEqual(self.store.summary()["recall_rate_30d"], 0.0)
 
+    # -------------------------------------------------------------- deck scope / deck_counts
+    def test_deck_counts_always_covers_both_decks(self):
+        # self.pid (from setUp) is a "new" main-deck problem.
+        nc = self.add("NC due", deck="neetcode", first_rating=3)["id"]
+        set_card(self.db_path, nc, review_state_card(last_review=ANCHOR - 5 * DAY, stability=2.0,
+                                                      due=ANCHOR - DAY))
+        self.add("NC new", deck="neetcode")
+        for scope in ("main", "neetcode", "all"):
+            s = self.store.summary(scope=scope)
+            self.assertEqual(s["deck_counts"], {
+                "main": {"total": 1, "due": 0, "new": 1},
+                "neetcode": {"total": 2, "due": 1, "new": 1},
+            })
+
+    def test_deck_counts_excludes_suspended(self):
+        self.add("NC suspended", deck="neetcode", suspended=True)
+        self.assertEqual(self.store.summary()["deck_counts"]["neetcode"],
+                         {"total": 0, "due": 0, "new": 0})
+
+    def test_summary_scope_main_excludes_neetcode_by_default(self):
+        self.add("NC", deck="neetcode", first_rating=3)
+        s = self.store.summary()
+        self.assertEqual(s["counts"]["total"], 1)  # only self.pid
+
+    def test_summary_scope_neetcode(self):
+        self.add("NC1", deck="neetcode")
+        self.add("NC2", deck="neetcode")
+        s = self.store.summary(scope="neetcode")
+        self.assertEqual(s["counts"]["total"], 2)
+
+    def test_summary_scope_all(self):
+        self.add("NC", deck="neetcode")
+        s = self.store.summary(scope="all")
+        self.assertEqual(s["counts"]["total"], 2)  # self.pid + NC
+
+    def test_summary_toggle_includes_neetcode_in_main_scope(self):
+        self.add("NC", deck="neetcode")
+        self.store.update_settings({"neetcode_in_main": True})
+        self.assertEqual(self.store.summary()["counts"]["total"], 2)
+
+    def test_reviewed_today_respects_scope(self):
+        nc = self.add("NC", deck="neetcode")["id"]
+        self.store.review_problem(nc, 3)
+        self.assertEqual(self.store.summary()["counts"]["reviewed_today"], 0)
+        self.assertEqual(self.store.summary(scope="neetcode")["counts"]["reviewed_today"], 1)
+        self.assertEqual(self.store.summary(scope="all")["counts"]["reviewed_today"], 1)
+
 
 # ============================================================================ settings
 class SettingsTest(FrozenStoreTestCase):
@@ -1079,7 +1316,9 @@ class SettingsTest(FrozenStoreTestCase):
                                           "again_next_day": 0})
         self.assertEqual(new, {"desired_retention": 0.851, "maximum_interval": 30,
                                "new_per_day": 4, "day_starts_at": 6, "again_next_day": False,
-                               "fsrs_parameters": None})
+                               "fsrs_parameters": None, "neetcode_in_main": False,
+                               "neetcode_new_per_day": 3, "allow_code_run": True,
+                               "claude_mode": "off", "claude_model": "sonnet"})
         self.assertIsInstance(new["maximum_interval"], int)
         self.assertIsInstance(new["again_next_day"], bool)
 
@@ -1300,6 +1539,36 @@ class SettingsTest(FrozenStoreTestCase):
         self.add("B", first_rating=1)
         self.assertEqual(self.store.reschedule_all(sched.SchedulerSettings()), 2)
 
+    # -------------------------------------------------------------- neetcode settings
+    def test_neetcode_settings_defaults(self):
+        s = self.store.get_settings()
+        self.assertEqual((s["neetcode_in_main"], s["neetcode_new_per_day"]), (False, 3))
+
+    def test_neetcode_settings_validated(self):
+        new = self.store.update_settings({"neetcode_in_main": True, "neetcode_new_per_day": 7})
+        self.assertEqual((new["neetcode_in_main"], new["neetcode_new_per_day"]), (True, 7))
+        self.assertIsInstance(new["neetcode_in_main"], bool)
+        for bad in ("yes", 2, None):
+            with self.subTest(bad=bad), self.assertRaises(Invalid):
+                self.store.update_settings({"neetcode_in_main": bad})
+        for bad in (-1, 101, "abc", None):
+            with self.subTest(bad=bad), self.assertRaises(Invalid):
+                self.store.update_settings({"neetcode_new_per_day": bad})
+        for v in (0, 100):
+            self.assertEqual(self.store.update_settings({"neetcode_new_per_day": v})["neetcode_new_per_day"], v)
+
+    def test_neetcode_settings_do_not_reschedule(self):
+        pid = self.add("Fuzzed", first_rating=4)["id"]
+        before = snapshot(self.db_path)
+        self.store.update_settings({"neetcode_in_main": True, "neetcode_new_per_day": 9})
+        self.assertEqual(snapshot(self.db_path), before)
+        self.assertEqual(self.store.get_problem(pid)["reps"], 1)
+
+    def test_neetcode_settings_do_not_call_reschedule_all(self):
+        with mock.patch.object(Store, "_reschedule_all") as m:
+            self.store.update_settings({"neetcode_in_main": True, "neetcode_new_per_day": 9})
+        m.assert_not_called()
+
 
 # ============================================================================ export / import
 class ExportImportTest(FrozenStoreTestCase):
@@ -1354,7 +1623,7 @@ class ExportImportTest(FrozenStoreTestCase):
         dst = {p["uid"]: p for p in self.other.list_problems() if p["id"] != unrelated}
         self.assertEqual(set(src), set(dst))
         compare = ("title", "url", "source", "difficulty", "tags", "prompt", "insight", "notes",
-                   "solution", "language", "suspended", "created_at", "updated_at", "status",
+                   "solution", "language", "suspended", "deck", "created_at", "updated_at", "status",
                    "due", "last_review", "stability", "fsrs_difficulty", "retrievability",
                    "reps", "lapses", "last_rating")
         for uid, s in src.items():
@@ -1407,6 +1676,33 @@ class ExportImportTest(FrozenStoreTestCase):
     def test_import_does_not_change_settings(self):
         self.other.import_all(self.store.export_all())
         self.assertEqual(self.other.get_settings(), DEFAULT_SETTINGS)
+
+    def test_drafts_round_trip(self):
+        self.store.save_draft(self.a, "print('hi from a')", "python")
+        data = json.loads(json.dumps(self.store.export_all()))
+        self.assertEqual(len(data["drafts"]), 1)
+        self.assertEqual(data["drafts"][0]["code"], "print('hi from a')")
+        self.assertNotIn("problem_id", data["drafts"][0])
+        self.other.import_all(data)
+        uid = self.store.get_problem(self.a)["uid"]
+        new_id = [p["id"] for p in self.other.list_problems() if p["uid"] == uid][0]
+        self.assertEqual(self.other.get_draft(new_id)["code"], "print('hi from a')")
+
+    def test_import_of_backup_without_drafts_key_still_works(self):
+        data = self.store.export_all()
+        del data["drafts"]
+        result = self.other.import_all(data)
+        self.assertEqual(result, {"added": 3, "skipped": 0})
+        for p in self.other.list_problems():
+            self.assertEqual(self.other.get_draft(p["id"])["code"], "")
+
+    def test_import_skips_a_draft_for_an_unknown_problem_uid(self):
+        data = self.store.export_all()
+        data["drafts"] = [{"problem_uid": "not-a-real-uid", "code": "x", "language": "python",
+                           "updated_at": "2026-01-01T00:00:00+00:00"}]
+        result = self.other.import_all(data)
+        self.assertEqual(result, {"added": 3, "skipped": 0})
+        self.assertEqual(count_rows(self.other.db_path, "drafts"), 0)
 
     def test_rejects_non_backup_payloads(self):
         for payload in ({}, {"app": "anki"}, {"problems": []}, [], "dsa-review", None, 42,
@@ -1479,6 +1775,36 @@ class ExportImportTest(FrozenStoreTestCase):
             self.other.import_all({"app": "dsa-review",
                                    "problems": [{"uid": "u-1", "title": "No card"}]})
 
+    # -------------------------------------------------------------- deck on export/import
+    def test_export_includes_deck(self):
+        self.store.update_problem(self.b, {"deck": "neetcode"})
+        data = self.store.export_all()
+        by_id = {p["id"]: p for p in data["problems"]}
+        self.assertEqual(by_id[self.a]["deck"], "main")
+        self.assertEqual(by_id[self.b]["deck"], "neetcode")
+
+    def test_import_round_trip_preserves_deck(self):
+        self.store.update_problem(self.b, {"deck": "neetcode"})
+        data = json.loads(json.dumps(self.store.export_all()))
+        self.other.import_all(data)
+        b_uid = self.store.get_problem(self.b)["uid"]
+        imported = next(p for p in self.other.list_problems(scope="all") if p["uid"] == b_uid)
+        self.assertEqual(imported["deck"], "neetcode")
+
+    def test_import_missing_deck_defaults_to_main(self):
+        data = json.loads(json.dumps(self.store.export_all()))
+        for p in data["problems"]:
+            del p["deck"]
+        self.other.import_all(data)
+        self.assertTrue(all(p["deck"] == "main" for p in self.other.list_problems(scope="all")))
+
+    def test_import_invalid_deck_is_rejected(self):
+        data = json.loads(json.dumps(self.store.export_all()))
+        data["problems"][0]["deck"] = "bogus"
+        with self.assertRaises(Invalid):
+            self.other.import_all(data)
+        # all-or-nothing: nothing from this payload was added
+        self.assertEqual(len(self.other.list_problems(scope="all")), 0)
 
     # ---------------------------------------------------------------- keep vs. reschedule
     FAR_DUE = "2030-01-01T12:00:00+00:00"   # a due date no replay would ever produce
@@ -1524,6 +1850,15 @@ class ExportImportTest(FrozenStoreTestCase):
         self.assertEqual(data["settings"]["new_per_day"], 7)   # differs, but doesn't matter
         self.assertEqual(self.other.import_all(data), {"added": 3, "skipped": 0})
         self.assert_kept(self.other, data)
+
+    def test_import_keeps_cards_when_only_neetcode_settings_differ(self):
+        data = self.tampered_export()
+        data["settings"]["neetcode_in_main"] = True
+        data["settings"]["neetcode_new_per_day"] = 99
+        self.assertEqual(self.other.import_all(data), {"added": 3, "skipped": 0})
+        self.assert_kept(self.other, data)
+        # and the neetcode settings themselves aren't pulled in from the backup
+        self.assertEqual(self.other.get_settings()["neetcode_in_main"], False)
 
     def test_import_keeps_cards_when_backup_has_no_settings_and_local_are_defaults(self):
         data = self.tampered_export()
@@ -1814,7 +2149,7 @@ class MigrationTest(StoreTestCase):
         pid, other, times = self.make_v1_db()
         untouched = problem_row(self.db_path, other)
         store = Store(self.db_path)
-        self.assertEqual(self.user_version(), 2)
+        self.assertEqual(self.user_version(), SCHEMA_VERSION)
 
         card = get_card(self.db_path, pid)
         self.assertEqual(card.last_review, utc(2026, 1, 9, 12))
@@ -1863,7 +2198,7 @@ class MigrationTest(StoreTestCase):
         with connect(self.db_path) as c:
             c.execute("PRAGMA user_version = 1")
         Store(self.db_path)
-        self.assertEqual(self.user_version(), 2)
+        self.assertEqual(self.user_version(), SCHEMA_VERSION)
         self.assertEqual(problem_row(self.db_path, pid), before)
 
     def test_v2_database_is_not_replayed_again(self):
@@ -1874,7 +2209,97 @@ class MigrationTest(StoreTestCase):
         before = snapshot(self.db_path)
         Store(self.db_path)
         self.assertEqual(snapshot(self.db_path), before)
-        self.assertEqual(self.user_version(), 2)
+        self.assertEqual(self.user_version(), SCHEMA_VERSION)
+
+
+class DeckColumnMigrationTest(StoreTestCase):
+    """A database from before the NeetCode deck existed (no `deck` column)."""
+
+    OLD_SCHEMA = """
+    CREATE TABLE problems (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        uid         TEXT NOT NULL UNIQUE,
+        title       TEXT NOT NULL,
+        url         TEXT NOT NULL DEFAULT '',
+        source      TEXT NOT NULL DEFAULT '',
+        difficulty  TEXT NOT NULL DEFAULT '',
+        tags        TEXT NOT NULL DEFAULT '[]',
+        prompt      TEXT NOT NULL DEFAULT '',
+        insight     TEXT NOT NULL DEFAULT '',
+        notes       TEXT NOT NULL DEFAULT '',
+        solution    TEXT NOT NULL DEFAULT '',
+        language    TEXT NOT NULL DEFAULT 'python',
+        suspended   INTEGER NOT NULL DEFAULT 0,
+        card        TEXT NOT NULL,
+        due         TEXT NOT NULL,
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL
+    );
+    CREATE TABLE reviews (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        problem_id   INTEGER NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
+        rating       INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 4),
+        reviewed_at  TEXT NOT NULL,
+        duration_ms  INTEGER,
+        card_before  TEXT NOT NULL,
+        card_after   TEXT NOT NULL,
+        kind         TEXT NOT NULL DEFAULT 'review'
+    );
+    CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+    """
+
+    def make_old_db(self, n_problems=2):
+        self.db_path = self.tmp / "legacy" / "dsa_review.db"
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        with connect(self.db_path) as c:
+            c.executescript(self.OLD_SCHEMA)
+            now = utc(2026, 1, 1, 12).isoformat()
+            for i in range(n_problems):
+                card = sched.new_card()
+                card.card_id = i + 1
+                c.execute(
+                    "INSERT INTO problems (uid, title, card, due, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (str(uuid.uuid4()), f"Problem {i + 1}", sched.card_to_json(card), now, now, now))
+                c.execute(
+                    "INSERT INTO reviews (problem_id, rating, reviewed_at, card_before, card_after, kind) "
+                    "VALUES (?, 3, ?, ?, ?, 'review')",
+                    (i + 1, now, sched.card_to_json(card), sched.card_to_json(card)))
+            c.execute(f"PRAGMA user_version = {SCHEMA_VERSION - 1}")
+
+    def dump_problems(self):
+        with connect(self.db_path) as c:
+            return [dict(r) for r in c.execute("SELECT * FROM problems ORDER BY id")]
+
+    def test_deck_column_is_added_and_existing_rows_stay_main(self):
+        self.make_old_db()
+        Store(self.db_path)
+        with connect(self.db_path) as c:
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(problems)")}
+            self.assertIn("deck", cols)
+            self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM reviews").fetchone()[0], 2)
+            tables = {r["name"] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+            self.assertIn("drafts", tables)
+        problems = self.dump_problems()
+        self.assertEqual(len(problems), 2)
+        self.assertTrue(all(p["deck"] == "main" for p in problems))
+
+    def test_old_schema_db_can_use_drafts_after_opening(self):
+        """A database from before drafts existed (and before `deck` existed) still works."""
+        self.make_old_db(n_problems=1)
+        store = Store(self.db_path)
+        pid = self.dump_problems()[0]["id"]
+        self.assertEqual(store.get_draft(pid), {"code": "", "language": "python", "updated_at": None})
+        store.save_draft(pid, "print('ok')")
+        self.assertEqual(store.get_draft(pid)["code"], "print('ok')")
+
+    def test_reopening_is_a_no_op(self):
+        self.make_old_db()
+        Store(self.db_path)
+        before = self.dump_problems()
+        Store(self.db_path)
+        self.assertEqual(self.dump_problems(), before)
 
 
 # ============================================================================ backup

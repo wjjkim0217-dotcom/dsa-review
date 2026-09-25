@@ -191,6 +191,16 @@ class ProblemEndpointsTest(ServerTestCase):
     def test_first_rating_numeric_string(self):
         self.assertEqual(self.create(first_rating="4")["last_rating"], 4)
 
+    def test_deck_field_on_create_and_update(self):
+        p = self.create(title="NC", deck="neetcode")
+        self.assertEqual(p["deck"], "neetcode")
+        p = self.create(title="Default")  # omitted -> main
+        self.assertEqual(p["deck"], "main")
+        updated = self.call("PATCH", f"/api/problems/{p['id']}", {"deck": "neetcode"})
+        self.assertEqual(updated["deck"], "neetcode")
+        resp = self.request("POST", "/api/problems", {"title": "Bad", "deck": "bogus"})
+        self.assertError(resp, 400, "deck")
+
     def test_unicode_round_trip(self):
         title = "두 수의 합 — Two Sum 🚀"
         p = self.create(title=title, notes="メモ\n")
@@ -317,7 +327,8 @@ class ReadEndpointsTest(ServerTestCase):
         self.create()
         s = self.call("GET", "/api/summary")
         self.assertEqual(set(s), {"now", "day_start", "day_end", "today", "counts", "streak_days",
-                                  "recall_rate_30d", "reviews_30d", "forecast", "settings"})
+                                  "recall_rate_30d", "reviews_30d", "forecast", "settings",
+                                  "deck_counts"})
         self.assertEqual(s["forecast"][0]["date"], s["today"])
         self.assertEqual(s["counts"], {"total": 2, "active": 2, "suspended": 0, "new": 1,
                                        "due": 0, "scheduled": 1, "reviewed_today": 1})
@@ -346,6 +357,27 @@ class ReadEndpointsTest(ServerTestCase):
         self.assertEqual(self.call("GET", "/api/tags"),
                          {"tags": [{"tag": "graphs", "count": 2}, {"tag": "bfs", "count": 1}]})
 
+    # -------------------------------------------------------------- deck query param
+    def test_deck_param_scopes_problems_queue_summary_tags(self):
+        self.create(title="Main", tags=["a"])
+        self.create(title="NC", tags=["b"], deck="neetcode")
+        self.assertEqual(len(self.call("GET", "/api/problems")["problems"]), 1)
+        self.assertEqual(len(self.call("GET", "/api/problems?deck=neetcode")["problems"]), 1)
+        self.assertEqual(len(self.call("GET", "/api/problems?deck=all")["problems"]), 2)
+        self.assertEqual(self.call("GET", "/api/summary")["counts"]["total"], 1)
+        self.assertEqual(self.call("GET", "/api/summary?deck=neetcode")["counts"]["total"], 1)
+        self.assertEqual(self.call("GET", "/api/summary?deck=all")["counts"]["total"], 2)
+        self.assertEqual(len(self.call("GET", "/api/queue")["new"]), 1)
+        self.assertEqual(len(self.call("GET", "/api/queue?deck=neetcode")["new"]), 1)
+        self.assertEqual(len(self.call("GET", "/api/queue?deck=all")["new"]), 2)
+        self.assertEqual({t["tag"] for t in self.call("GET", "/api/tags")["tags"]}, {"a"})
+        self.assertEqual({t["tag"] for t in self.call("GET", "/api/tags?deck=neetcode")["tags"]}, {"b"})
+
+    def test_invalid_deck_param_is_400(self):
+        for path in ("/api/problems", "/api/queue", "/api/summary", "/api/tags"):
+            with self.subTest(path=path):
+                self.assertError(self.request("GET", f"{path}?deck=bogus"), 400)
+
 
 class SettingsEndpointsTest(ServerTestCase):
     PREVIEW_KEYS = {"good_every_time", "hard_first_then_good", "hard_every_time"}
@@ -355,7 +387,10 @@ class SettingsEndpointsTest(ServerTestCase):
         self.assertEqual(set(data), {"settings", "interval_preview"})
         self.assertEqual(data["settings"], {"desired_retention": 0.9, "maximum_interval": 60,
                                             "again_next_day": True, "new_per_day": 3,
-                                            "day_starts_at": 4, "fsrs_parameters": None})
+                                            "day_starts_at": 4, "fsrs_parameters": None,
+                                            "neetcode_in_main": False, "neetcode_new_per_day": 3,
+                                            "allow_code_run": True,
+                                            "claude_mode": "off", "claude_model": "sonnet"})
         self.assertEqual(set(data["interval_preview"]), self.PREVIEW_KEYS)
         self.assertEqual(data["interval_preview"]["good_every_time"][:3], [2.0, 11.0, 46.0])
 
@@ -430,6 +465,110 @@ class SettingsEndpointsTest(ServerTestCase):
                       "maximum_interval=36501", "maximum_interval=1.5", "maximum_interval=x"):
             with self.subTest(query=query):
                 self.assertError(self.request("GET", f"/api/settings/preview?{query}"), 400)
+
+
+class DraftEndpointsTest(ServerTestCase):
+    def test_get_empty_draft(self):
+        pid = self.create()["id"]
+        data = self.call("GET", f"/api/problems/{pid}/draft")
+        self.assertEqual(data, {"code": "", "language": "python", "updated_at": None})
+
+    def test_put_and_get_round_trip(self):
+        pid = self.create()["id"]
+        saved = self.call("PUT", f"/api/problems/{pid}/draft", {"code": "print(1)", "language": "python"})
+        self.assertEqual(saved["code"], "print(1)")
+        self.assertIsNotNone(saved["updated_at"])
+        got = self.call("GET", f"/api/problems/{pid}/draft")
+        self.assertEqual(got, saved)
+
+    def test_language_optional(self):
+        pid = self.create()["id"]
+        saved = self.call("PUT", f"/api/problems/{pid}/draft", {"code": "x = 1"})
+        self.assertEqual(saved["language"], "python")
+
+    def test_code_required(self):
+        pid = self.create()["id"]
+        self.assertError(self.request("PUT", f"/api/problems/{pid}/draft", {}), 400, "code")
+
+    def test_code_over_limit_rejected(self):
+        pid = self.create()["id"]
+        self.assertError(self.request("PUT", f"/api/problems/{pid}/draft", {"code": "x" * 100001}),
+                         400, "too long")
+
+    def test_unknown_problem_404(self):
+        self.assertError(self.request("GET", "/api/problems/99999/draft"), 404)
+        self.assertError(self.request("PUT", "/api/problems/99999/draft", {"code": "x"}), 404)
+
+    def test_draft_deleted_with_problem(self):
+        pid = self.create()["id"]
+        self.call("PUT", f"/api/problems/{pid}/draft", {"code": "keep me"})
+        self.call("DELETE", f"/api/problems/{pid}")
+        self.assertEqual(count_rows(self.db_path, "drafts"), 0)
+
+    def test_write_guards_apply(self):
+        pid = self.create()["id"]
+        # cross-origin PUT is refused just like every other write endpoint
+        resp = self.request("PUT", f"/api/problems/{pid}/draft", {"code": "x"},
+                            headers={"Origin": "http://evil.example"})
+        self.assertError(resp, 403)
+
+
+class RunEndpointTest(ServerTestCase):
+    def test_run_basic(self):
+        data = self.call("POST", "/api/run", {"code": "print('hi')"})
+        self.assertEqual(data["stdout"], "hi\n")
+        self.assertEqual(data["exit_code"], 0)
+        self.assertFalse(data["timed_out"])
+
+    def test_run_with_stdin(self):
+        data = self.call("POST", "/api/run", {"code": "print(input())", "stdin": "hey\n"})
+        self.assertEqual(data["stdout"], "hey\n")
+
+    def test_run_traceback_shows_solution_py(self):
+        data = self.call("POST", "/api/run", {"code": "x = 1\nraise ValueError('nope')"})
+        self.assertIn("solution.py", data["stderr"])
+        self.assertNotEqual(data["exit_code"], 0)
+
+    def test_code_required(self):
+        self.assertError(self.request("POST", "/api/run", {}), 400, "code")
+
+    def test_code_over_limit_rejected(self):
+        self.assertError(self.request("POST", "/api/run", {"code": "x" * 100001}), 400, "too long")
+
+    def test_disabled_by_setting_returns_403(self):
+        self.call("PATCH", "/api/settings", {"allow_code_run": False})
+        self.assertError(self.request("POST", "/api/run", {"code": "print(1)"}), 403)
+        # turning it back on works again
+        self.call("PATCH", "/api/settings", {"allow_code_run": True})
+        data = self.call("POST", "/api/run", {"code": "print(1)"})
+        self.assertEqual(data["stdout"], "1\n")
+
+    def test_disabling_run_does_not_reschedule_anything(self):
+        pid = self.create(first_rating=3)["id"]
+        before = self.call("GET", f"/api/problems/{pid}")["due"]
+        self.call("PATCH", "/api/settings", {"allow_code_run": False})
+        after = self.call("GET", f"/api/problems/{pid}")["due"]
+        self.assertEqual(before, after)
+
+    def test_concurrent_run_returns_409(self):
+        import threading
+        import time as time_mod
+
+        results = []
+
+        def slow_run():
+            results.append(self.request("POST", "/api/run", {"code": "import time\ntime.sleep(1)"}))
+
+        t = threading.Thread(target=slow_run)
+        t.start()
+        time_mod.sleep(0.2)  # let the slow run actually start
+        resp = self.request("POST", "/api/run", {"code": "print(1)"})
+        t.join(5)
+        self.assertEqual(resp.status, 409)
+        self.assertEqual(results[0].status, 200)
+
+    def test_method_not_allowed(self):
+        self.assertError(self.request("GET", "/api/run"), 404)
 
 
 class ExportImportEndpointsTest(ServerTestCase):
@@ -942,6 +1081,78 @@ class LocalServerTest(unittest.TestCase):
         self.assertEqual(len(started), 1)
         self.assertNotEqual(started[0], port)
         self.assertIn(f"http://127.0.0.1:{started[0]}/", out.getvalue())
+
+
+class NeetcodeEndpointTest(ServerTestCase):
+    def test_get_neetcode(self):
+        data = self.call("GET", "/api/neetcode")
+        self.assertEqual(set(data), {"name", "source", "categories", "totals", "problems", "adoptable"})
+        self.assertEqual(len(data["problems"]), 150)
+        self.assertTrue(all(p["status"] == "not_started" for p in data["problems"]))
+        self.assertEqual(data["totals"]["total"], 150)
+        self.assertEqual(data["totals"]["not_started"], 150)
+        self.assertEqual(data["adoptable"], [])
+
+        self.create(title="Two Sum", url="https://leetcode.com/problems/two-sum/", deck="neetcode")
+        data = self.call("GET", "/api/neetcode")
+        p = next(p for p in data["problems"] if p["slug"] == "two-sum")
+        self.assertEqual(p["status"], "added")
+        self.assertEqual(data["totals"]["added"], 1)
+        self.assertEqual(data["totals"]["not_started"], 149)
+
+    def test_adoptable_lists_matching_main_deck_problems(self):
+        self.create(title="Two Sum", url="https://leetcode.com/problems/two-sum/")  # main deck
+        data = self.call("GET", "/api/neetcode")
+        self.assertEqual(len(data["adoptable"]), 1)
+        a = data["adoptable"][0]
+        self.assertEqual(set(a), {"problem_id", "title", "nc_id", "nc_title", "category"})
+        self.assertEqual((a["title"], a["nc_title"]), ("Two Sum", "Two Sum"))
+
+    def test_adopt_all(self):
+        p1 = self.create(title="Two Sum", url="https://leetcode.com/problems/two-sum/",
+                         tags=["custom"])
+        p2 = self.create(title="Contains Duplicate",
+                         url="https://leetcode.com/problems/contains-duplicate/")
+        before_due = (p1["due"], p2["due"])
+        result = self.call("POST", "/api/neetcode/adopt", {})
+        self.assertEqual(result["moved"], 2)
+        self.assertEqual(result["tracker"]["adoptable"], [])
+
+        p1_after = self.call("GET", f"/api/problems/{p1['id']}")
+        p2_after = self.call("GET", f"/api/problems/{p2['id']}")
+        self.assertEqual(p1_after["deck"], "neetcode")
+        self.assertEqual(p2_after["deck"], "neetcode")
+        self.assertEqual(set(p1_after["tags"]), {"custom", "neetcode-150", "arrays-hashing"})
+        self.assertEqual(set(p2_after["tags"]), {"neetcode-150", "arrays-hashing"})
+        # scheduling untouched
+        self.assertEqual((p1_after["due"], p2_after["due"]), before_due)
+
+    def test_adopt_subset(self):
+        p1 = self.create(title="Two Sum", url="https://leetcode.com/problems/two-sum/")
+        p2 = self.create(title="Contains Duplicate",
+                         url="https://leetcode.com/problems/contains-duplicate/")
+        result = self.call("POST", "/api/neetcode/adopt", {"problem_ids": [p1["id"]]})
+        self.assertEqual(result["moved"], 1)
+        self.assertEqual(self.call("GET", f"/api/problems/{p1['id']}")["deck"], "neetcode")
+        self.assertEqual(self.call("GET", f"/api/problems/{p2['id']}")["deck"], "main")
+
+    def test_adopt_invalid_id_is_rejected(self):
+        p1 = self.create(title="Two Sum", url="https://leetcode.com/problems/two-sum/")
+        resp = self.request("POST", "/api/neetcode/adopt", {"problem_ids": [p1["id"] + 999]})
+        self.assertError(resp, 400)
+        # nothing moved
+        self.assertEqual(self.call("GET", f"/api/problems/{p1['id']}")["deck"], "main")
+
+    def test_adopt_does_not_duplicate_existing_tags(self):
+        p1 = self.create(title="Two Sum", url="https://leetcode.com/problems/two-sum/",
+                         tags=["neetcode-150"])
+        self.call("POST", "/api/neetcode/adopt", {})
+        p1_after = self.call("GET", f"/api/problems/{p1['id']}")
+        self.assertEqual(p1_after["tags"].count("neetcode-150"), 1)
+
+    def test_adopt_problem_ids_must_be_a_list(self):
+        resp = self.request("POST", "/api/neetcode/adopt", {"problem_ids": "not-a-list"})
+        self.assertError(resp, 400)
 
 
 class RealStaticDirTest(ServerTestCase):
