@@ -297,6 +297,19 @@ class Handler(BaseHTTPRequestHandler):
             with self.lock:
                 return self._json(200, store.import_all(data))
 
+        if path == "/api/reset" and method == "POST":
+            # "Start over": deletes all problems/reviews/attempts. The body must spell out
+            # {"confirm": "DELETE"} so nothing can wipe the data by accident.
+            data = self._body()
+            if data.get("confirm") != "DELETE":
+                raise ApiError(HTTPStatus.BAD_REQUEST, 'to delete everything, send {"confirm": "DELETE"}')
+            reset_settings = data.get("reset_settings", False)
+            if not isinstance(reset_settings, bool):
+                raise ApiError(HTTPStatus.BAD_REQUEST, "reset_settings must be true or false")
+            with self.lock:
+                result = store.clear_all(store.db_path.parent / "backups", reset_settings)
+            return self._json(200, result)
+
         if path == "/api/run" and method == "POST":
             if not store.get_settings().get("allow_code_run", True):
                 raise ApiError(HTTPStatus.FORBIDDEN,

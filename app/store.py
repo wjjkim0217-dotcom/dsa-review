@@ -211,20 +211,25 @@ class Store:
         finally:
             c.close()
 
-    def backup(self, backup_dir: Path, keep: int = 10) -> Path | None:
-        """Copy the database into backup_dir (called once at startup)."""
+    def backup(self, backup_dir: Path, keep: int = 10, prefix: str = "dsa_review") -> Path | None:
+        """Copy the database into backup_dir (called once at startup, and before "Start over").
+
+        Only the last `keep` backups with the same prefix are kept, so the startup
+        backups ("dsa_review-...") never prune the ones made before a reset
+        ("before-reset-...").
+        """
         if not self.db_path.exists():
             return None
         backup_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-        target = backup_dir / f"dsa_review-{stamp}.db"
+        target = backup_dir / f"{prefix}-{stamp}.db"
         src = sqlite3.connect(self.db_path)
         dst = sqlite3.connect(target)
         with dst:
             src.backup(dst)
         src.close()
         dst.close()
-        old = sorted(backup_dir.glob("dsa_review-*.db"))[:-keep]
+        old = sorted(backup_dir.glob(f"{prefix}-*.db"))[:-keep]
         for f in old:
             try:
                 f.unlink(missing_ok=True)
@@ -833,6 +838,31 @@ class Store:
         return count
 
     # ------------------------------------------------------------------ backup / restore
+    def clear_all(self, backup_dir: Path, reset_settings: bool = False) -> dict:
+        """Start over: delete every problem, review and saved attempt.
+
+        A copy of the database is saved to backup_dir first (as before-reset-<time>.db),
+        so an accidental reset can still be recovered. Settings are kept unless
+        reset_settings is true. The Claude API key lives outside the database
+        (secrets.json) and is never touched here.
+        """
+        backup = self.backup(backup_dir, keep=5, prefix="before-reset")
+        with self.conn() as c:
+            counts = {
+                "problems": c.execute("SELECT COUNT(*) FROM problems").fetchone()[0],
+                "reviews": c.execute("SELECT COUNT(*) FROM reviews").fetchone()[0],
+                "drafts": c.execute("SELECT COUNT(*) FROM drafts").fetchone()[0],
+            }
+            c.execute("DELETE FROM drafts")
+            c.execute("DELETE FROM reviews")
+            c.execute("DELETE FROM problems")
+            # Restart ids at 1, like a fresh install (sqlite_sequence tracks AUTOINCREMENT ids).
+            c.execute("DELETE FROM sqlite_sequence WHERE name IN ('problems', 'reviews')")
+            if reset_settings:
+                c.execute("DELETE FROM settings")  # missing keys fall back to DEFAULT_SETTINGS
+        return {"deleted": counts, "settings_reset": bool(reset_settings),
+                "backup": backup.name if backup else None}
+
     def export_all(self) -> dict:
         with self.conn() as c:
             problems = [dict(r) for r in c.execute("SELECT * FROM problems ORDER BY id")]

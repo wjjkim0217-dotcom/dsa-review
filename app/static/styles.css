@@ -1452,3 +1452,9 @@ dialog p { color: var(--text-2); margin-top: 8px; overflow-wrap: anywhere; }
   .attempt-toolbar .spacer { flex: 1 1 0; min-width: 0; }
   .attempt-toolbar .attempt-save-status { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+/* Settings → Start over */
+.danger-card { border-color: var(--again-border); }
+.reset-actions { margin-top: 14px; }
+.typed-confirm-label { display: block; margin-top: 16px; margin-bottom: 6px; font-size: 0.9rem; }
+dialog input[type="text"] { width: 100%; }

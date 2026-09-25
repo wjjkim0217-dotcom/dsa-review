@@ -216,6 +216,12 @@ shows the old and new gaps and asks before changing anything. You can undo it wi
   moving to a new computer (and run `optimize.py` again if you had personalized the scheduler).
 - Your Claude API key (if you saved one) lives in `data/secrets.json`, separately from the
   database. It's never included in a backup export, so re-enter it after moving to a new computer.
+- **Settings → Start over** deletes every problem, review and saved attempt (type `DELETE` to
+  confirm), e.g. to hand the app to someone new. A copy of the database is saved first as
+  `data/backups/before-reset-<time>.db`; to undo, stop the app and copy that file over
+  `data/dsa_review.db`. Tick "Also reset settings" to restore the default settings too. Your Claude
+  API key is kept. (Someone who clones this project from Git starts empty anyway: `data/` is
+  never committed.)
 
 ## Handy commands
 

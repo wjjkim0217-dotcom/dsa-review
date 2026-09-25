@@ -239,6 +239,46 @@ function confirmDialog({ title, body, confirmLabel = 'Confirm' }) {
 }
 
 /**
+ * Like confirmDialog, but the user must type `word` (e.g. "DELETE") before the
+ * confirm button unlocks. For actions that can't be undone from inside the app.
+ * Builds its own <dialog> and removes it when closed.
+ */
+function typedConfirmDialog({ title, body, word, confirmLabel }) {
+  const opener = document.activeElement;
+  const inputId = `typed-confirm-${Math.random().toString(36).slice(2, 8)}`;
+  const input = h('input', { type: 'text', id: inputId, autocomplete: 'off', spellcheck: 'false' });
+  const confirmBtn = h('button', { type: 'button', class: 'btn btn-danger-solid', disabled: true }, confirmLabel);
+  const cancelBtn = h('button', { type: 'button', class: 'btn' }, 'Cancel');
+  const dlg = h('dialog', { 'aria-labelledby': `${inputId}-title`, 'aria-describedby': `${inputId}-body` },
+    h('h2', { id: `${inputId}-title`, text: title }),
+    h('p', { id: `${inputId}-body`, text: body }),
+    h('label', { class: 'typed-confirm-label', for: inputId }, 'Type ', h('strong', { text: word }), ' to confirm'),
+    input,
+    h('div', { class: 'dialog-actions' }, cancelBtn, confirmBtn));
+  document.body.append(dlg);
+  const matches = () => input.value.trim() === word;
+  input.addEventListener('input', () => { confirmBtn.disabled = !matches(); });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && matches()) {
+      e.preventDefault();
+      dlg.close('confirm');
+    }
+  });
+  confirmBtn.addEventListener('click', () => dlg.close('confirm'));
+  cancelBtn.addEventListener('click', () => dlg.close('cancel'));
+  return new Promise((resolve) => {
+    dlg.addEventListener('close', () => {
+      const ok = dlg.returnValue === 'confirm';
+      dlg.remove();
+      if (!ok && opener && opener.isConnected) opener.focus();
+      resolve(ok);
+    }, { once: true });
+    dlg.showModal();
+    input.focus();
+  });
+}
+
+/**
  * Accessible "More" dropdown menu, built on <details>/<summary>.
  * items: array of { label, onClick, hidden, disabled, danger }, or a function
  * returning that array (called fresh each time the menu opens, so item text/
@@ -3537,6 +3577,52 @@ async function viewSettings(main, { seq }) {
       h('label', { class: 'btn file-btn' }, icon('upload'), 'Import backup', fileInput)),
     h('p', { class: 'hint backup-note', text: 'Importing skips problems that are already here, so it’s safe to run more than once. A copy of your database is also saved to data/backups every time the app starts (last 10 kept).' }));
 
+  // ---------- Start over: delete all data (e.g. to hand the app to someone new)
+  const resetSettingsChk = h('input', { type: 'checkbox', id: 'reset-settings' });
+  const resetBtn = h('button', { type: 'button', class: 'btn btn-danger' }, 'Delete all data…');
+  resetBtn.addEventListener('click', async () => {
+    const ok = await typedConfirmDialog({
+      title: 'Delete all data?',
+      body: 'Every problem, review, and saved attempt in both decks will be deleted'
+        + (resetSettingsChk.checked ? ', and settings go back to their defaults' : '')
+        + '. A backup copy is saved in data/backups first.',
+      word: 'DELETE',
+      confirmLabel: 'Delete all data',
+    });
+    if (!ok) return;
+    resetBtn.disabled = true;
+    try {
+      const r = await api('POST', '/api/reset', { confirm: 'DELETE', reset_settings: resetSettingsChk.checked });
+      // Forget everything cached about the old data, then show the fresh app.
+      state.summaries = { main: null, neetcode: null };
+      state.latestSummary = null;
+      state.sessions = { main: null, neetcode: null };
+      state.todayTags = { main: '', neetcode: '' };
+      state.library.q = '';
+      state.library.tag = '';
+      state.library.status = '';
+      state.tags = [];
+      const where = r.backup ? ` A backup was saved as data/backups/${r.backup}.` : '';
+      toast(`All data deleted.${where}`, { type: 'success', duration: 8000 });
+      refreshSummaries();
+      location.hash = '#/today';
+    } catch (err) {
+      toastError(err);
+      if (resetBtn.isConnected) resetBtn.disabled = false;
+    }
+  });
+  const resetCard = h('section', { class: 'card danger-card', 'aria-labelledby': 'reset-title' },
+    h('div', { class: 'card-head' },
+      h('h2', { id: 'reset-title', text: 'Start over' }),
+      h('p', { text: 'Empty the app, like a fresh install.' })),
+    h('p', { class: 'explainer', text: 'Deletes every problem, review, and saved attempt in both decks. A backup copy of your database is saved in data/backups first, and your Claude API key is kept.' }),
+    h('label', { class: 'check', for: 'reset-settings' },
+      resetSettingsChk,
+      h('span', null,
+        h('span', { class: 'choice-title', text: 'Also reset settings to their defaults' }),
+        h('span', { class: 'choice-desc', text: 'Daily limits, scheduling, code runner and Claude mode.' }))),
+    h('div', { class: 'btn-group reset-actions' }, resetBtn));
+
   // ---------- Daily new problems: Main + NeetCode per-day limits, and the toggle that
   // folds NeetCode into the main Today/Library. All three autosave on change.
   async function autosavePatch(patch, { onError } = {}) {
@@ -3624,7 +3710,7 @@ async function viewSettings(main, { seq }) {
   const claudeCard = await claudeHelpCard(s, seq);
 
   main.append(h('div', { class: 'settings-grid' },
-    claudeCard, dailyCard, schedCard, runCard, backupCard, guideCard));
+    claudeCard, dailyCard, schedCard, runCard, backupCard, guideCard, resetCard));
 }
 
 /** The "Claude help" card on Settings: mode, API key, model, CLI status, test connection. */

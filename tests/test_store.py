@@ -2374,3 +2374,52 @@ class BackupTest(StoreTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ClearAllTest(StoreTestCase):
+    """Settings → Start over: wipe problems/reviews/attempts, with a backup first."""
+
+    def setUp(self):
+        super().setUp()
+        self.backups = self.db_path.parent / "backups"
+        p1 = self.add("Two Sum", first_rating=3)
+        self.add("Valid Anagram")
+        self.store.save_draft(p1["id"], "print(1)", "python")
+        self.store.update_settings({"new_per_day": 7})
+
+    def test_deletes_everything_and_reports_counts(self):
+        result = self.store.clear_all(self.backups)
+        self.assertEqual(result["deleted"], {"problems": 2, "reviews": 1, "drafts": 1})
+        self.assertEqual(self.store.list_problems(scope="all"), [])
+        with self.store.conn() as c:
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM reviews").fetchone()[0], 0)
+            self.assertEqual(c.execute("SELECT COUNT(*) FROM drafts").fetchone()[0], 0)
+        self.assertEqual(self.store.summary()["counts"]["total"], 0)
+
+    def test_ids_restart_at_one(self):
+        self.store.clear_all(self.backups)
+        self.assertEqual(self.add("Fresh start")["id"], 1)
+
+    def test_keeps_settings_by_default(self):
+        result = self.store.clear_all(self.backups)
+        self.assertFalse(result["settings_reset"])
+        self.assertEqual(self.store.get_settings()["new_per_day"], 7)
+
+    def test_can_reset_settings_too(self):
+        result = self.store.clear_all(self.backups, reset_settings=True)
+        self.assertTrue(result["settings_reset"])
+        self.assertEqual(self.store.get_settings(), dict(DEFAULT_SETTINGS))
+
+    def test_backup_is_saved_first_and_restorable(self):
+        result = self.store.clear_all(self.backups)
+        backup = self.backups / result["backup"]
+        self.assertTrue(result["backup"].startswith("before-reset-"))
+        self.assertTrue(backup.is_file())
+        old = Store(backup)
+        self.assertEqual(len(old.list_problems(scope="all")), 2)
+
+    def test_startup_backups_never_prune_reset_backups(self):
+        result = self.store.clear_all(self.backups)
+        for _ in range(3):
+            self.store.backup(self.backups, keep=1)
+        self.assertTrue((self.backups / result["backup"]).is_file())

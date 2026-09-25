@@ -1178,3 +1178,34 @@ class RealStaticDirTest(ServerTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ResetEndpointTest(ServerTestCase):
+    """POST /api/reset (Settings → Start over)."""
+
+    def test_requires_typed_confirmation(self):
+        self.create()
+        for body in ({}, {"confirm": "delete"}, {"confirm": "yes"}, {"confirm": True}):
+            with self.subTest(body=body):
+                self.assertError(self.request("POST", "/api/reset", body), 400, "DELETE")
+        self.assertEqual(len(self.call("GET", "/api/problems?deck=all")["problems"]), 1)
+
+    def test_rejects_non_boolean_reset_settings(self):
+        self.assertError(self.request("POST", "/api/reset", {"confirm": "DELETE", "reset_settings": "yes"}), 400)
+
+    def test_clears_everything(self):
+        self.create(first_rating=3)
+        self.create(title="Valid Anagram", deck="neetcode")
+        result = self.call("POST", "/api/reset", {"confirm": "DELETE"})
+        self.assertEqual(result["deleted"]["problems"], 2)
+        self.assertTrue(result["backup"].startswith("before-reset-"))
+        self.assertEqual(self.call("GET", "/api/problems?deck=all")["problems"], [])
+        self.assertEqual(self.call("GET", "/api/summary")["counts"]["total"], 0)
+
+    def test_is_a_guarded_write(self):
+        # Like every write: other websites can't trigger it.
+        resp = self.request("POST", "/api/reset", {"confirm": "DELETE"},
+                            headers={"Origin": "http://evil.example"})
+        self.assertError(resp, 403)
+        resp = self.request("POST", "/api/reset", raw=b'{"confirm": "DELETE"}', content_type="text/plain")
+        self.assertError(resp, 415)
