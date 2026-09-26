@@ -67,6 +67,13 @@ class LocalServer(ThreadingHTTPServer):
         super().server_bind()
 
 
+def with_starter(problem: dict) -> dict:
+    """Add `starter_code` to a full problem response: LeetCode-style starter code
+    for the editor when the problem is one of the NeetCode 150, else null."""
+    problem["starter_code"] = neetcode.starter_for(problem)
+    return problem
+
+
 class ApiError(Exception):
     def __init__(self, status: int, message: str):
         super().__init__(message)
@@ -231,17 +238,18 @@ class Handler(BaseHTTPRequestHandler):
                     first_rating = None
                 with self.lock:
                     problem = store.create_problem(data, first_rating, duration_ms)
-                return self._json(201, problem)
+                return self._json(201, with_starter(problem))
 
         m = re.fullmatch(r"/api/problems/(\d+)(?:/(review|undo|draft))?", path)
         if m:
             pid, action = int(m.group(1)), m.group(2)
             if action is None and method == "GET":
-                return self._json(200, store.get_problem(pid))
+                return self._json(200, with_starter(store.get_problem(pid)))
             if action is None and method in ("PATCH", "PUT"):
                 data = self._body()
                 with self.lock:
-                    return self._json(200, store.update_problem(pid, data))
+                    problem = store.update_problem(pid, data)
+                return self._json(200, with_starter(problem))
             if action is None and method == "DELETE":
                 with self.lock:
                     store.delete_problem(pid)
@@ -250,11 +258,12 @@ class Handler(BaseHTTPRequestHandler):
                 data = self._body()
                 with self.lock:
                     problem = store.review_problem(pid, data.get("rating"), data.get("duration_ms"))
-                return self._json(200, problem)
+                return self._json(200, with_starter(problem))
             if action == "undo" and method == "POST":
                 data = self._body()
                 with self.lock:
-                    return self._json(200, store.undo_last_review(pid, data.get("review_id")))
+                    problem = store.undo_last_review(pid, data.get("review_id"))
+                return self._json(200, with_starter(problem))
             if action == "draft" and method == "GET":
                 return self._json(200, store.get_draft(pid))
             # POST too: navigator.sendBeacon (used to save a draft when the tab closes) can only POST.

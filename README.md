@@ -61,12 +61,14 @@ Every problem page has an **Attempt** card with a real code editor (syntax highl
 auto-indent, bracket matching, undo, search – it's [CodeMirror](https://codemirror.net/), see
 `tools/codemirror/`). It autosaves what you type (about a second after you stop, and again if
 you leave the page), so you can pick a problem back up later exactly where you left it. If
-there's nothing saved yet, it starts from a small starter template.
+there's nothing saved yet, it starts from starter code: for NeetCode 150 problems, the same
+class and method signatures LeetCode gives you (e.g. `def twoSum(self, nums: List[int],
+target: int) -> List[int]:`); for anything else, a small generic stub.
 
 - **Run** (or `Ctrl`/`Cmd`+`Enter`) executes your code as a real Python process **on your own
   computer** – see **Security notes** below.
 - **Input (stdin)** opens a small box for standard input, if your code calls `input()`.
-- **Reset to template** clears the editor back to the starter template (asks first).
+- **Reset to starter code** clears the editor back to the starter code (asks first).
 - **Copy** copies the code to your clipboard.
 - **Save as my solution** copies the editor's contents into this problem's saved *Solution*
   field (asks first if one is already saved).
@@ -277,7 +279,8 @@ app/runner.py           runs Attempt-editor code as a local Python process (POST
 app/claude_help.py      "Ask Claude" debugging help (API key or Claude Code CLI, see above)
 app/scheduling.py       FSRS-6 wrapper with the coding-problem tweaks above
 app/neetcode.py         NeetCode 150 tracker (matches the list against your library)
-app/neetcode150.json    the NeetCode 150 list (from github.com/neetcode-gh/leetcode)
+app/neetcode150.json    the NeetCode 150 list (from github.com/neetcode-gh/leetcode), incl. starter code
+tools/neetcode/         build_scaffolds.py: regenerates that starter code (needs internet)
 app/static/             the web page (HTML/CSS/JS, no external dependencies)
 app/static/vendor/      the vendored CodeMirror editor bundle (see tools/codemirror/build.md)
 tools/codemirror/       source + build script for the vendored editor bundle (Node/npm; only

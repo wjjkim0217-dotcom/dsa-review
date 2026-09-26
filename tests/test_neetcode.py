@@ -262,3 +262,58 @@ class TrackerFromStoreTest(StoreTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------- starter code
+class StarterCodeTest(unittest.TestCase):
+    """LeetCode-style starter code for the editor (app/neetcode150.json "starter")."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.problems = {p["slug"]: p for p in neetcode.get_data()["problems"]}
+
+    def test_every_problem_has_valid_starter_code(self):
+        for slug, p in self.problems.items():
+            with self.subTest(slug=slug):
+                self.assertTrue(p.get("starter"), slug)
+                compile(p["starter"], slug, "exec")
+
+    def test_starter_code_runs_with_the_run_buttons_helpers(self):
+        # Type hints like Optional[TreeNode] are evaluated when the class is defined,
+        # so each scaffold must run cleanly with the runner's built-in helpers.
+        import runner
+        for slug in ("two-sum", "reverse-linked-list", "merge-k-sorted-lists",
+                     "invert-binary-tree", "lru-cache", "copy-list-with-random-pointer",
+                     "clone-graph", "serialize-and-deserialize-binary-tree"):
+            with self.subTest(slug=slug):
+                result = runner.run_python(self.problems[slug]["starter"], "", timeout=10)
+                self.assertEqual(result["exit_code"], 0, result["stderr"])
+
+    def test_matches_leetcode_signatures(self):
+        self.assertIn("def twoSum(self, nums: List[int], target: int) -> List[int]:",
+                      self.problems["two-sum"]["starter"])
+        self.assertIn("def reverseList(self, head: Optional[ListNode]) -> Optional[ListNode]:",
+                      self.problems["reverse-linked-list"]["starter"])
+        self.assertIn("modify head in-place instead", self.problems["reorder-list"]["starter"])
+        self.assertIn("def wallsAndGates(self, rooms: List[List[int]]) -> None:",
+                      self.problems["walls-and-gates"]["starter"])
+
+    def test_design_problems_have_no_solution_helpers(self):
+        # NeetCode's LRU Cache adds a Node class and remove/insert helpers - those give the
+        # approach away and aren't part of LeetCode's scaffold.
+        lru = self.problems["lru-cache"]["starter"]
+        self.assertIn("class LRUCache:", lru)
+        for helper in ("class Node", "def remove", "def insert"):
+            self.assertNotIn(helper, lru)
+        self.assertIn("# obj = LRUCache(capacity)", lru)
+
+    def test_starter_for_matches_by_link_then_title(self):
+        by_link = neetcode.starter_for({"title": "whatever", "url": "https://leetcode.com/problems/two-sum/"})
+        self.assertIn("def twoSum", by_link)
+        by_title = neetcode.starter_for({"title": "  two   SUM ", "url": ""})
+        self.assertIn("def twoSum", by_title)
+        self.assertIsNone(neetcode.starter_for({"title": "My own problem", "url": ""}))
+
+    def test_tracker_payload_leaves_starter_out(self):
+        payload = neetcode.build_tracker([])
+        self.assertNotIn("starter", payload["problems"][0])

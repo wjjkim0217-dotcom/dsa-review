@@ -955,13 +955,17 @@ function claudeAssist({ problem, getCode, getLastRun, alwaysDefaultHint = false 
   };
 }
 
-function starterTemplate(title) {
-  return `# ${title}\nclass Solution:\n    def solve(self):\n        pass\n\n\n# Try it:\n# print(Solution().solve())\n`;
+/** What a blank editor starts with. NeetCode 150 problems get LeetCode-style starter
+ * code from the server (`starter_code`: the class and method signatures, built by
+ * tools/neetcode/build_scaffolds.py); anything else gets a generic stub. */
+function starterTemplate(p) {
+  if (p.starter_code) return `# ${p.title}\n${p.starter_code}`;
+  return `# ${p.title}\nclass Solution:\n    def solve(self):\n        pass\n\n\n# Try it:\n# print(Solution().solve())\n`;
 }
 
 /**
  * options:
- *   problem       - the problem this attempt is for (used for the title/template)
+ *   problem       - the problem this attempt is for (used for the title and starter code)
  *   initialCode   - code to load the editor with
  *   initialLanguage - defaults to 'python'
  *   ariaLabel     - accessible label for the editor region
@@ -1139,15 +1143,15 @@ function attemptEditor(options) {
         },
       },
       {
-        label: 'Reset to template',
+        label: 'Reset to starter code',
         onClick: async () => {
           const ok = await confirmDialog({
-            title: 'Reset to template?',
-            body: 'Your current code in this editor will be replaced with the starter template. This can’t be undone.',
+            title: 'Reset to starter code?',
+            body: 'Your current code in this editor will be replaced with the starter code. This can’t be undone.',
             confirmLabel: 'Reset',
           });
           if (!ok || destroyed) return;
-          editor.setValue(starterTemplate(problem.title));
+          editor.setValue(starterTemplate(problem));
           if (autosaveDraft) scheduleSave();
         },
       },
@@ -1380,7 +1384,7 @@ function createReviewCard(p, { mode, onRated, onSkip, onClose }) {
     // as soon as you start typing, same as the problem page's editor.
     codeAttempt = attemptEditor({
       problem: p,
-      initialCode: starterTemplate(p.title),
+      initialCode: starterTemplate(p),
       initialLanguage: p.language || 'python',
       ariaLabel: `Recode ${p.title} here`,
       autosaveDraft: true,
@@ -3480,7 +3484,7 @@ function attemptCard(p, ctrl) {
       draft = { code: '', language: p.language || 'python' };
     }
     if (!isCurrent(ctrl.seq) || !holder.isConnected) return;
-    const code = draft.code || starterTemplate(p.title);
+    const code = draft.code || starterTemplate(p);
     const attempt = attemptEditor({
       problem: p,
       initialCode: code,

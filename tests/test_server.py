@@ -1216,3 +1216,23 @@ class ResetEndpointTest(ServerTestCase):
         self.assertError(resp, 403)
         resp = self.request("POST", "/api/reset", raw=b'{"confirm": "DELETE"}', content_type="text/plain")
         self.assertError(resp, 415)
+
+
+class StarterCodeEndpointTest(ServerTestCase):
+    """Full-problem responses carry `starter_code` for NeetCode 150 problems."""
+
+    def test_neetcode_problem_gets_leetcode_starter_code(self):
+        created = self.create(title="Two Sum", url="https://leetcode.com/problems/two-sum/")
+        self.assertIn("def twoSum(self, nums: List[int], target: int) -> List[int]:",
+                      created["starter_code"])
+        got = self.call("GET", f"/api/problems/{created['id']}")
+        self.assertEqual(got["starter_code"], created["starter_code"])
+        reviewed = self.call("POST", f"/api/problems/{created['id']}/review", {"rating": 3})
+        self.assertEqual(reviewed["starter_code"], created["starter_code"])
+        patched = self.call("PATCH", f"/api/problems/{created['id']}", {"notes": "x"})
+        self.assertEqual(patched["starter_code"], created["starter_code"])
+
+    def test_other_problems_get_null(self):
+        created = self.create(title="My own problem")
+        self.assertIsNone(created["starter_code"])
+        self.assertIsNone(self.call("GET", f"/api/problems/{created['id']}")["starter_code"])

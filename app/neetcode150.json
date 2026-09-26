@@ -32,7 +32,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/contains-duplicate/",
    "video_url": "https://www.youtube.com/watch?v=3OamzN90kPg",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0217-contains-duplicate.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0217-contains-duplicate.py",
+   "starter": "class Solution:\n    def containsDuplicate(self, nums: List[int]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().containsDuplicate(...))\n"
   },
   {
    "id": 2,
@@ -44,7 +45,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/valid-anagram/",
    "video_url": "https://www.youtube.com/watch?v=9UtInBqnCgA",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0242-valid-anagram.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0242-valid-anagram.py",
+   "starter": "class Solution:\n    def isAnagram(self, s: str, t: str) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isAnagram(...))\n"
   },
   {
    "id": 3,
@@ -56,7 +58,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/two-sum/",
    "video_url": "https://www.youtube.com/watch?v=KLlXCFG5TnA",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0001-two-sum.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0001-two-sum.py",
+   "starter": "class Solution:\n    def twoSum(self, nums: List[int], target: int) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().twoSum(...))\n"
   },
   {
    "id": 4,
@@ -68,7 +71,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/group-anagrams/",
    "video_url": "https://www.youtube.com/watch?v=vzdNOK2oB2E",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0049-group-anagrams.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0049-group-anagrams.py",
+   "starter": "class Solution:\n    def groupAnagrams(self, strs: List[str]) -> List[List[str]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().groupAnagrams(...))\n"
   },
   {
    "id": 5,
@@ -80,7 +84,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/top-k-frequent-elements/",
    "video_url": "https://www.youtube.com/watch?v=YPTqKIgVk-k",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0347-top-k-frequent-elements.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0347-top-k-frequent-elements.py",
+   "starter": "class Solution:\n    def topKFrequent(self, nums: List[int], k: int) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().topKFrequent(...))\n"
   },
   {
    "id": 6,
@@ -92,7 +97,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/product-of-array-except-self/",
    "video_url": "https://www.youtube.com/watch?v=bNvIQI2wAjk",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0238-product-of-array-except-self.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0238-product-of-array-except-self.py",
+   "starter": "class Solution:\n    def productExceptSelf(self, nums: List[int]) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().productExceptSelf(...))\n"
   },
   {
    "id": 7,
@@ -104,7 +110,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/valid-sudoku/",
    "video_url": "https://www.youtube.com/watch?v=TjFXEUCMqI8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0036-valid-sudoku.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0036-valid-sudoku.py",
+   "starter": "class Solution:\n    def isValidSudoku(self, board: List[List[str]]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isValidSudoku(...))\n"
   },
   {
    "id": 8,
@@ -116,7 +123,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/encode-and-decode-strings/",
    "video_url": "https://www.youtube.com/watch?v=B1k_sxOSgv8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0271-encode-and-decode-strings.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0271-encode-and-decode-strings.py",
+   "starter": "class Solution:\n\n    def encode(self, strs: List[str]) -> str:\n        pass\n\n    def decode(self, s: str) -> List[str]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# s = Solution()\n# print(s.decode(s.encode([\"neet\", \"code\"])))\n"
   },
   {
    "id": 9,
@@ -128,7 +136,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/longest-consecutive-sequence/",
    "video_url": "https://www.youtube.com/watch?v=P6RZZMu_maU",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0128-longest-consecutive-sequence.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0128-longest-consecutive-sequence.py",
+   "starter": "class Solution:\n    def longestConsecutive(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().longestConsecutive(...))\n"
   },
   {
    "id": 10,
@@ -140,7 +149,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/valid-palindrome/",
    "video_url": "https://www.youtube.com/watch?v=jJXJ16kPFWg",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0125-valid-palindrome.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0125-valid-palindrome.py",
+   "starter": "class Solution:\n    def isPalindrome(self, s: str) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isPalindrome(...))\n"
   },
   {
    "id": 11,
@@ -152,7 +162,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/two-sum-ii-input-array-is-sorted/",
    "video_url": "https://www.youtube.com/watch?v=cQ1Oz4ckceM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0167-two-sum-ii-input-array-is-sorted.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0167-two-sum-ii-input-array-is-sorted.py",
+   "starter": "class Solution:\n    def twoSum(self, numbers: List[int], target: int) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().twoSum(...))\n"
   },
   {
    "id": 12,
@@ -164,7 +175,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/3sum/",
    "video_url": "https://www.youtube.com/watch?v=jzZsG8n2R9A",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0015-3sum.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0015-3sum.py",
+   "starter": "class Solution:\n    def threeSum(self, nums: List[int]) -> List[List[int]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().threeSum(...))\n"
   },
   {
    "id": 13,
@@ -176,7 +188,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/container-with-most-water/",
    "video_url": "https://www.youtube.com/watch?v=UuiTKBwPgAo",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0011-container-with-most-water.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0011-container-with-most-water.py",
+   "starter": "class Solution:\n    def maxArea(self, height: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().maxArea(...))\n"
   },
   {
    "id": 14,
@@ -188,7 +201,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/trapping-rain-water/",
    "video_url": "https://www.youtube.com/watch?v=ZI2z5pq0TqA",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0042-trapping-rain-water.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0042-trapping-rain-water.py",
+   "starter": "class Solution:\n    def trap(self, height: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().trap(...))\n"
   },
   {
    "id": 15,
@@ -200,7 +214,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock/",
    "video_url": "https://www.youtube.com/watch?v=1pkOgXD63yU",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0121-best-time-to-buy-and-sell-stock.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0121-best-time-to-buy-and-sell-stock.py",
+   "starter": "class Solution:\n    def maxProfit(self, prices: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().maxProfit(...))\n"
   },
   {
    "id": 16,
@@ -212,7 +227,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/longest-substring-without-repeating-characters/",
    "video_url": "https://www.youtube.com/watch?v=wiGpQwVHdE0",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0003-longest-substring-without-repeating-characters.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0003-longest-substring-without-repeating-characters.py",
+   "starter": "class Solution:\n    def lengthOfLongestSubstring(self, s: str) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().lengthOfLongestSubstring(...))\n"
   },
   {
    "id": 17,
@@ -224,7 +240,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/longest-repeating-character-replacement/",
    "video_url": "https://www.youtube.com/watch?v=gqXU1UyA8pk",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0424-longest-repeating-character-replacement.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0424-longest-repeating-character-replacement.py",
+   "starter": "class Solution:\n    def characterReplacement(self, s: str, k: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().characterReplacement(...))\n"
   },
   {
    "id": 18,
@@ -236,7 +253,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/permutation-in-string/",
    "video_url": "https://www.youtube.com/watch?v=UbyhOgBN834",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0567-permutation-in-string.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0567-permutation-in-string.py",
+   "starter": "class Solution:\n    def checkInclusion(self, s1: str, s2: str) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().checkInclusion(...))\n"
   },
   {
    "id": 19,
@@ -248,7 +266,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/minimum-window-substring/",
    "video_url": "https://www.youtube.com/watch?v=jSto0O4AJbM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0076-minimum-window-substring.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0076-minimum-window-substring.py",
+   "starter": "class Solution:\n    def minWindow(self, s: str, t: str) -> str:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().minWindow(...))\n"
   },
   {
    "id": 20,
@@ -260,7 +279,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/sliding-window-maximum/",
    "video_url": "https://www.youtube.com/watch?v=DfljaUwZsOk",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0239-sliding-window-maximum.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0239-sliding-window-maximum.py",
+   "starter": "class Solution:\n    def maxSlidingWindow(self, nums: List[int], k: int) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().maxSlidingWindow(...))\n"
   },
   {
    "id": 21,
@@ -272,7 +292,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/valid-parentheses/",
    "video_url": "https://www.youtube.com/watch?v=WTzjTskDFMg",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0020-valid-parentheses.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0020-valid-parentheses.py",
+   "starter": "class Solution:\n    def isValid(self, s: str) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isValid(...))\n"
   },
   {
    "id": 22,
@@ -284,7 +305,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/min-stack/",
    "video_url": "https://www.youtube.com/watch?v=qkLl7nAwDPo",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0155-min-stack.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0155-min-stack.py",
+   "starter": "class MinStack:\n\n    def __init__(self):\n        pass\n\n    def push(self, val: int) -> None:\n        pass\n\n    def pop(self) -> None:\n        pass\n\n    def top(self) -> int:\n        pass\n\n    def getMin(self) -> int:\n        pass\n\n\n# Your MinStack object will be instantiated and called as such:\n# obj = MinStack()\n# obj.push(val)\n# obj.pop()\n# param_3 = obj.top()\n# param_4 = obj.getMin()\n"
   },
   {
    "id": 23,
@@ -296,7 +318,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/evaluate-reverse-polish-notation/",
    "video_url": "https://www.youtube.com/watch?v=iu0082c4HDE",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0150-evaluate-reverse-polish-notation.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0150-evaluate-reverse-polish-notation.py",
+   "starter": "class Solution:\n    def evalRPN(self, tokens: List[str]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().evalRPN(...))\n"
   },
   {
    "id": 24,
@@ -308,7 +331,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/generate-parentheses/",
    "video_url": "https://www.youtube.com/watch?v=s9fokUqJ76A",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0022-generate-parentheses.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0022-generate-parentheses.py",
+   "starter": "class Solution:\n    def generateParenthesis(self, n: int) -> List[str]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().generateParenthesis(...))\n"
   },
   {
    "id": 25,
@@ -320,7 +344,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/daily-temperatures/",
    "video_url": "https://www.youtube.com/watch?v=cTBiBSnjO3c",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0739-daily-temperatures.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0739-daily-temperatures.py",
+   "starter": "class Solution:\n    def dailyTemperatures(self, temperatures: List[int]) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().dailyTemperatures(...))\n"
   },
   {
    "id": 26,
@@ -332,7 +357,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/car-fleet/",
    "video_url": "https://www.youtube.com/watch?v=Pr6T-3yB9RM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0853-car-fleet.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0853-car-fleet.py",
+   "starter": "class Solution:\n    def carFleet(self, target: int, position: List[int], speed: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().carFleet(...))\n"
   },
   {
    "id": 27,
@@ -344,7 +370,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/largest-rectangle-in-histogram/",
    "video_url": "https://www.youtube.com/watch?v=zx5Sw9130L0",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0084-largest-rectangle-in-histogram.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0084-largest-rectangle-in-histogram.py",
+   "starter": "class Solution:\n    def largestRectangleArea(self, heights: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().largestRectangleArea(...))\n"
   },
   {
    "id": 28,
@@ -356,7 +383,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/binary-search/",
    "video_url": "https://www.youtube.com/watch?v=s4DPM8ct1pI",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0704-binary-search.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0704-binary-search.py",
+   "starter": "class Solution:\n    def search(self, nums: List[int], target: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().search(...))\n"
   },
   {
    "id": 29,
@@ -368,7 +396,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/search-a-2d-matrix/",
    "video_url": "https://www.youtube.com/watch?v=Ber2pi2C0j0",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0074-search-a-2d-matrix.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0074-search-a-2d-matrix.py",
+   "starter": "class Solution:\n    def searchMatrix(self, matrix: List[List[int]], target: int) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().searchMatrix(...))\n"
   },
   {
    "id": 30,
@@ -380,7 +409,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/koko-eating-bananas/",
    "video_url": "https://www.youtube.com/watch?v=U2SozAs9RzA",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0875-koko-eating-bananas.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0875-koko-eating-bananas.py",
+   "starter": "class Solution:\n    def minEatingSpeed(self, piles: List[int], h: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().minEatingSpeed(...))\n"
   },
   {
    "id": 31,
@@ -392,7 +422,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/find-minimum-in-rotated-sorted-array/",
    "video_url": "https://www.youtube.com/watch?v=nIVW4P8b1VA",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0153-find-minimum-in-rotated-sorted-array.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0153-find-minimum-in-rotated-sorted-array.py",
+   "starter": "class Solution:\n    def findMin(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().findMin(...))\n"
   },
   {
    "id": 32,
@@ -404,7 +435,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/search-in-rotated-sorted-array/",
    "video_url": "https://www.youtube.com/watch?v=U8XENwh8Oy8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0033-search-in-rotated-sorted-array.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0033-search-in-rotated-sorted-array.py",
+   "starter": "class Solution:\n    def search(self, nums: List[int], target: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().search(...))\n"
   },
   {
    "id": 33,
@@ -416,7 +448,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/time-based-key-value-store/",
    "video_url": "https://www.youtube.com/watch?v=fu2cD_6E8Hw",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0981-time-based-key-value-store.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0981-time-based-key-value-store.py",
+   "starter": "class TimeMap:\n\n    def __init__(self):\n        pass\n\n    def set(self, key: str, value: str, timestamp: int) -> None:\n        pass\n\n    def get(self, key: str, timestamp: int) -> str:\n        pass\n\n\n# Your TimeMap object will be instantiated and called as such:\n# obj = TimeMap()\n# obj.set(key,value,timestamp)\n# param_2 = obj.get(key,timestamp)\n"
   },
   {
    "id": 34,
@@ -428,7 +461,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/median-of-two-sorted-arrays/",
    "video_url": "https://www.youtube.com/watch?v=q6IEA26hvXc",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0004-median-of-two-sorted-arrays.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0004-median-of-two-sorted-arrays.py",
+   "starter": "class Solution:\n    def findMedianSortedArrays(self, nums1: List[int], nums2: List[int]) -> float:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().findMedianSortedArrays(...))\n"
   },
   {
    "id": 35,
@@ -440,7 +474,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/reverse-linked-list/",
    "video_url": "https://www.youtube.com/watch?v=G0_I-ZF0S38",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0206-reverse-linked-list.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0206-reverse-linked-list.py",
+   "starter": "# Definition for singly-linked list.\n# class ListNode:\n#     def __init__(self, val=0, next=None):\n#         self.val = val\n#         self.next = next\n\nclass Solution:\n    def reverseList(self, head: Optional[ListNode]) -> Optional[ListNode]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().reverseList(...))\n"
   },
   {
    "id": 36,
@@ -452,7 +487,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/merge-two-sorted-lists/",
    "video_url": "https://www.youtube.com/watch?v=XIdigk956u0",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0021-merge-two-sorted-lists.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0021-merge-two-sorted-lists.py",
+   "starter": "# Definition for singly-linked list.\n# class ListNode:\n#     def __init__(self, val=0, next=None):\n#         self.val = val\n#         self.next = next\n\nclass Solution:\n    def mergeTwoLists(self, list1: Optional[ListNode], list2: Optional[ListNode]) -> Optional[ListNode]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().mergeTwoLists(...))\n"
   },
   {
    "id": 37,
@@ -464,7 +500,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/reorder-list/",
    "video_url": "https://www.youtube.com/watch?v=S5bfdUTrKLM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0143-reorder-list.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0143-reorder-list.py",
+   "starter": "# Definition for singly-linked list.\n# class ListNode:\n#     def __init__(self, val=0, next=None):\n#         self.val = val\n#         self.next = next\n\nclass Solution:\n    def reorderList(self, head: Optional[ListNode]) -> None:\n        \"\"\"\n        Do not return anything, modify head in-place instead.\n        \"\"\"\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().reorderList(...))\n"
   },
   {
    "id": 38,
@@ -476,7 +513,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/remove-nth-node-from-end-of-list/",
    "video_url": "https://www.youtube.com/watch?v=XVuQxVej6y8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0019-remove-nth-node-from-end-of-list.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0019-remove-nth-node-from-end-of-list.py",
+   "starter": "# Definition for singly-linked list.\n# class ListNode:\n#     def __init__(self, val=0, next=None):\n#         self.val = val\n#         self.next = next\n\nclass Solution:\n    def removeNthFromEnd(self, head: Optional[ListNode], n: int) -> Optional[ListNode]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().removeNthFromEnd(...))\n"
   },
   {
    "id": 39,
@@ -488,7 +526,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/copy-list-with-random-pointer/",
    "video_url": "https://www.youtube.com/watch?v=5Y2EiZST97Y",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0138-copy-list-with-random-pointer.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0138-copy-list-with-random-pointer.py",
+   "starter": "# Definition for a Node (uncomment to test locally).\n# class Node:\n#     def __init__(self, x: int, next: 'Node' = None, random: 'Node' = None):\n#         self.val = int(x)\n#         self.next = next\n#         self.random = random\n\nclass Solution:\n    def copyRandomList(self, head: 'Optional[Node]') -> 'Optional[Node]':\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().copyRandomList(...))\n"
   },
   {
    "id": 40,
@@ -500,7 +539,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/add-two-numbers/",
    "video_url": "https://www.youtube.com/watch?v=wgFPrzTjm7s",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0002-add-two-numbers.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0002-add-two-numbers.py",
+   "starter": "# Definition for singly-linked list.\n# class ListNode:\n#     def __init__(self, val=0, next=None):\n#         self.val = val\n#         self.next = next\n\nclass Solution:\n    def addTwoNumbers(self, l1: Optional[ListNode], l2: Optional[ListNode]) -> Optional[ListNode]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().addTwoNumbers(...))\n"
   },
   {
    "id": 41,
@@ -512,7 +552,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/linked-list-cycle/",
    "video_url": "https://www.youtube.com/watch?v=gBTe7lFR3vc",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0141-linked-list-cycle.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0141-linked-list-cycle.py",
+   "starter": "# Definition for singly-linked list.\n# class ListNode:\n#     def __init__(self, val=0, next=None):\n#         self.val = val\n#         self.next = next\n\nclass Solution:\n    def hasCycle(self, head: Optional[ListNode]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().hasCycle(...))\n"
   },
   {
    "id": 42,
@@ -524,7 +565,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/find-the-duplicate-number/",
    "video_url": "https://www.youtube.com/watch?v=wjYnzkAhcNk",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0287-find-the-duplicate-number.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0287-find-the-duplicate-number.py",
+   "starter": "class Solution:\n    def findDuplicate(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().findDuplicate(...))\n"
   },
   {
    "id": 43,
@@ -536,7 +578,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/lru-cache/",
    "video_url": "https://www.youtube.com/watch?v=7ABFKPK2hD4",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0146-lru-cache.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0146-lru-cache.py",
+   "starter": "class LRUCache:\n\n    def __init__(self, capacity: int):\n        pass\n\n    def get(self, key: int) -> int:\n        pass\n\n    def put(self, key: int, value: int) -> None:\n        pass\n\n\n# Your LRUCache object will be instantiated and called as such:\n# obj = LRUCache(capacity)\n# param_1 = obj.get(key)\n# obj.put(key,value)\n"
   },
   {
    "id": 44,
@@ -548,7 +591,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/merge-k-sorted-lists/",
    "video_url": "https://www.youtube.com/watch?v=q5a5OiGbT6Q",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0023-merge-k-sorted-lists.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0023-merge-k-sorted-lists.py",
+   "starter": "# Definition for singly-linked list.\n# class ListNode:\n#     def __init__(self, val=0, next=None):\n#         self.val = val\n#         self.next = next\n\nclass Solution:\n    def mergeKLists(self, lists: List[Optional[ListNode]]) -> Optional[ListNode]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().mergeKLists(...))\n"
   },
   {
    "id": 45,
@@ -560,7 +604,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/reverse-nodes-in-k-group/",
    "video_url": "https://www.youtube.com/watch?v=1UOPsfP85V4",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0025-reverse-nodes-in-k-group.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0025-reverse-nodes-in-k-group.py",
+   "starter": "# Definition for singly-linked list.\n# class ListNode:\n#     def __init__(self, val=0, next=None):\n#         self.val = val\n#         self.next = next\n\nclass Solution:\n    def reverseKGroup(self, head: Optional[ListNode], k: int) -> Optional[ListNode]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().reverseKGroup(...))\n"
   },
   {
    "id": 46,
@@ -572,7 +617,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/invert-binary-tree/",
    "video_url": "https://www.youtube.com/watch?v=OnSn2XEQ4MY",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0226-invert-binary-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0226-invert-binary-tree.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def invertTree(self, root: Optional[TreeNode]) -> Optional[TreeNode]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().invertTree(...))\n"
   },
   {
    "id": 47,
@@ -584,7 +630,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/maximum-depth-of-binary-tree/",
    "video_url": "https://www.youtube.com/watch?v=hTM3phVI6YQ",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0104-maximum-depth-of-binary-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0104-maximum-depth-of-binary-tree.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def maxDepth(self, root: Optional[TreeNode]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().maxDepth(...))\n"
   },
   {
    "id": 48,
@@ -596,7 +643,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/diameter-of-binary-tree/",
    "video_url": "https://www.youtube.com/watch?v=bkxqA8Rfv04",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0543-diameter-of-binary-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0543-diameter-of-binary-tree.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def diameterOfBinaryTree(self, root: Optional[TreeNode]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().diameterOfBinaryTree(...))\n"
   },
   {
    "id": 49,
@@ -608,7 +656,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/balanced-binary-tree/",
    "video_url": "https://www.youtube.com/watch?v=QfJsau0ItOY",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0110-balanced-binary-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0110-balanced-binary-tree.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def isBalanced(self, root: Optional[TreeNode]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isBalanced(...))\n"
   },
   {
    "id": 50,
@@ -620,7 +669,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/same-tree/",
    "video_url": "https://www.youtube.com/watch?v=vRbbcKXCxOw",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0100-same-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0100-same-tree.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def isSameTree(self, p: Optional[TreeNode], q: Optional[TreeNode]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isSameTree(...))\n"
   },
   {
    "id": 51,
@@ -632,7 +682,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/subtree-of-another-tree/",
    "video_url": "https://www.youtube.com/watch?v=E36O5SWp-LE",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0572-subtree-of-another-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0572-subtree-of-another-tree.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def isSubtree(self, root: Optional[TreeNode], subRoot: Optional[TreeNode]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isSubtree(...))\n"
   },
   {
    "id": 52,
@@ -644,7 +695,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-search-tree/",
    "video_url": "https://www.youtube.com/watch?v=gs2LMfuOR9k",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0235-lowest-common-ancestor-of-a-binary-search-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0235-lowest-common-ancestor-of-a-binary-search-tree.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def lowestCommonAncestor(self, root: 'TreeNode', p: 'TreeNode', q: 'TreeNode') -> 'TreeNode':\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().lowestCommonAncestor(...))\n"
   },
   {
    "id": 53,
@@ -656,7 +708,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/binary-tree-level-order-traversal/",
    "video_url": "https://www.youtube.com/watch?v=6ZnyEApgFYg",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0102-binary-tree-level-order-traversal.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0102-binary-tree-level-order-traversal.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def levelOrder(self, root: Optional[TreeNode]) -> List[List[int]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().levelOrder(...))\n"
   },
   {
    "id": 54,
@@ -668,7 +721,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/binary-tree-right-side-view/",
    "video_url": "https://www.youtube.com/watch?v=d4zLyf32e3I",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0199-binary-tree-right-side-view.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0199-binary-tree-right-side-view.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def rightSideView(self, root: Optional[TreeNode]) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().rightSideView(...))\n"
   },
   {
    "id": 55,
@@ -680,7 +734,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/count-good-nodes-in-binary-tree/",
    "video_url": "https://www.youtube.com/watch?v=7cp5imvDzl4",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1448-count-good-nodes-in-binary-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1448-count-good-nodes-in-binary-tree.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def goodNodes(self, root: TreeNode) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().goodNodes(...))\n"
   },
   {
    "id": 56,
@@ -692,7 +747,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/validate-binary-search-tree/",
    "video_url": "https://www.youtube.com/watch?v=s6ATEkipzow",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0098-validate-binary-search-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0098-validate-binary-search-tree.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def isValidBST(self, root: Optional[TreeNode]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isValidBST(...))\n"
   },
   {
    "id": 57,
@@ -704,7 +760,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/kth-smallest-element-in-a-bst/",
    "video_url": "https://www.youtube.com/watch?v=5LUXSvjmGCw",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0230-kth-smallest-element-in-a-bst.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0230-kth-smallest-element-in-a-bst.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def kthSmallest(self, root: Optional[TreeNode], k: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().kthSmallest(...))\n"
   },
   {
    "id": 58,
@@ -716,7 +773,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/construct-binary-tree-from-preorder-and-inorder-traversal/",
    "video_url": "https://www.youtube.com/watch?v=ihj4IQGZ2zc",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0105-construct-binary-tree-from-preorder-and-inorder-traversal.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0105-construct-binary-tree-from-preorder-and-inorder-traversal.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def buildTree(self, preorder: List[int], inorder: List[int]) -> Optional[TreeNode]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().buildTree(...))\n"
   },
   {
    "id": 59,
@@ -728,7 +786,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/binary-tree-maximum-path-sum/",
    "video_url": "https://www.youtube.com/watch?v=Hr5cWUld4vU",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0124-binary-tree-maximum-path-sum.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0124-binary-tree-maximum-path-sum.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Solution:\n    def maxPathSum(self, root: Optional[TreeNode]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().maxPathSum(...))\n"
   },
   {
    "id": 60,
@@ -740,7 +799,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/serialize-and-deserialize-binary-tree/",
    "video_url": "https://www.youtube.com/watch?v=u4JAi2JJhI8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0297-serialize-and-deserialize-binary-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0297-serialize-and-deserialize-binary-tree.py",
+   "starter": "# Definition for a binary tree node.\n# class TreeNode:\n#     def __init__(self, val=0, left=None, right=None):\n#         self.val = val\n#         self.left = left\n#         self.right = right\n\nclass Codec:\n\n    def serialize(self, root: Optional[TreeNode]) -> str:\n        pass\n\n    def deserialize(self, data: str) -> Optional[TreeNode]:\n        pass\n\n\n# Your Codec object will be instantiated and called as such:\n# ser = Codec()\n# deser = Codec()\n# ans = deser.deserialize(ser.serialize(root))\n"
   },
   {
    "id": 61,
@@ -752,7 +812,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/implement-trie-prefix-tree/",
    "video_url": "https://www.youtube.com/watch?v=oobqoCJlHA0",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0208-implement-trie-prefix-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0208-implement-trie-prefix-tree.py",
+   "starter": "class Trie:\n\n    def __init__(self):\n        pass\n\n    def insert(self, word: str) -> None:\n        pass\n\n    def search(self, word: str) -> bool:\n        pass\n\n    def startsWith(self, prefix: str) -> bool:\n        pass\n\n\n# Your Trie object will be instantiated and called as such:\n# obj = Trie()\n# obj.insert(word)\n# param_2 = obj.search(word)\n# param_3 = obj.startsWith(prefix)\n"
   },
   {
    "id": 62,
@@ -764,7 +825,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/design-add-and-search-words-data-structure/",
    "video_url": "https://www.youtube.com/watch?v=BTf05gs_8iU",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0211-design-add-and-search-words-data-structure.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0211-design-add-and-search-words-data-structure.py",
+   "starter": "class WordDictionary:\n\n    def __init__(self):\n        pass\n\n    def addWord(self, word: str) -> None:\n        pass\n\n    def search(self, word: str) -> bool:\n        pass\n\n\n# Your WordDictionary object will be instantiated and called as such:\n# obj = WordDictionary()\n# obj.addWord(word)\n# param_2 = obj.search(word)\n"
   },
   {
    "id": 63,
@@ -776,7 +838,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/word-search-ii/",
    "video_url": "https://www.youtube.com/watch?v=asbcE9mZz_U",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0212-word-search-ii.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0212-word-search-ii.py",
+   "starter": "class Solution:\n    def findWords(self, board: List[List[str]], words: List[str]) -> List[str]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().findWords(...))\n"
   },
   {
    "id": 64,
@@ -788,7 +851,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/kth-largest-element-in-a-stream/",
    "video_url": "https://www.youtube.com/watch?v=hOjcdrqMoQ8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0703-kth-largest-element-in-a-stream.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0703-kth-largest-element-in-a-stream.py",
+   "starter": "class KthLargest:\n\n    def __init__(self, k: int, nums: List[int]):\n        pass\n\n    def add(self, val: int) -> int:\n        pass\n\n\n# Your KthLargest object will be instantiated and called as such:\n# obj = KthLargest(k, nums)\n# param_1 = obj.add(val)\n"
   },
   {
    "id": 65,
@@ -800,7 +864,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/last-stone-weight/",
    "video_url": "https://www.youtube.com/watch?v=B-QCq79-Vfw",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1046-last-stone-weight.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1046-last-stone-weight.py",
+   "starter": "class Solution:\n    def lastStoneWeight(self, stones: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().lastStoneWeight(...))\n"
   },
   {
    "id": 66,
@@ -812,7 +877,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/k-closest-points-to-origin/",
    "video_url": "https://www.youtube.com/watch?v=rI2EBUEMfTk",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0973-k-closest-points-to-origin.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0973-k-closest-points-to-origin.py",
+   "starter": "class Solution:\n    def kClosest(self, points: List[List[int]], k: int) -> List[List[int]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().kClosest(...))\n"
   },
   {
    "id": 67,
@@ -824,7 +890,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/kth-largest-element-in-an-array/",
    "video_url": "https://www.youtube.com/watch?v=XEmy13g1Qxc",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0215-kth-largest-element-in-an-array.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0215-kth-largest-element-in-an-array.py",
+   "starter": "class Solution:\n    def findKthLargest(self, nums: List[int], k: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().findKthLargest(...))\n"
   },
   {
    "id": 68,
@@ -836,7 +903,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/task-scheduler/",
    "video_url": "https://www.youtube.com/watch?v=s8p8ukTyA2I",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0621-task-scheduler.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0621-task-scheduler.py",
+   "starter": "class Solution:\n    def leastInterval(self, tasks: List[str], n: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().leastInterval(...))\n"
   },
   {
    "id": 69,
@@ -848,7 +916,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/design-twitter/",
    "video_url": "https://www.youtube.com/watch?v=pNichitDD2E",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0355-design-twitter.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0355-design-twitter.py",
+   "starter": "class Twitter:\n\n    def __init__(self):\n        pass\n\n    def postTweet(self, userId: int, tweetId: int) -> None:\n        pass\n\n    def getNewsFeed(self, userId: int) -> List[int]:\n        pass\n\n    def follow(self, followerId: int, followeeId: int) -> None:\n        pass\n\n    def unfollow(self, followerId: int, followeeId: int) -> None:\n        pass\n\n\n# Your Twitter object will be instantiated and called as such:\n# obj = Twitter()\n# obj.postTweet(userId,tweetId)\n# param_2 = obj.getNewsFeed(userId)\n# obj.follow(followerId,followeeId)\n# obj.unfollow(followerId,followeeId)\n"
   },
   {
    "id": 70,
@@ -860,7 +929,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/find-median-from-data-stream/",
    "video_url": "https://www.youtube.com/watch?v=itmhHWaHupI",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0295-find-median-from-data-stream.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0295-find-median-from-data-stream.py",
+   "starter": "class MedianFinder:\n\n    def __init__(self):\n        pass\n\n    def addNum(self, num: int) -> None:\n        pass\n\n    def findMedian(self) -> float:\n        pass\n\n\n# Your MedianFinder object will be instantiated and called as such:\n# obj = MedianFinder()\n# obj.addNum(num)\n# param_2 = obj.findMedian()\n"
   },
   {
    "id": 71,
@@ -872,7 +942,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/subsets/",
    "video_url": "https://www.youtube.com/watch?v=REOH22Xwdkk",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0078-subsets.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0078-subsets.py",
+   "starter": "class Solution:\n    def subsets(self, nums: List[int]) -> List[List[int]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().subsets(...))\n"
   },
   {
    "id": 72,
@@ -884,7 +955,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/combination-sum/",
    "video_url": "https://www.youtube.com/watch?v=GBKI9VSKdGg",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0039-combination-sum.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0039-combination-sum.py",
+   "starter": "class Solution:\n    def combinationSum(self, candidates: List[int], target: int) -> List[List[int]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().combinationSum(...))\n"
   },
   {
    "id": 73,
@@ -896,7 +968,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/permutations/",
    "video_url": "https://www.youtube.com/watch?v=s7AvT7cGdSo",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0046-permutations.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0046-permutations.py",
+   "starter": "class Solution:\n    def permute(self, nums: List[int]) -> List[List[int]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().permute(...))\n"
   },
   {
    "id": 74,
@@ -908,7 +981,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/subsets-ii/",
    "video_url": "https://www.youtube.com/watch?v=Vn2v6ajA7U0",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0090-subsets-ii.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0090-subsets-ii.py",
+   "starter": "class Solution:\n    def subsetsWithDup(self, nums: List[int]) -> List[List[int]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().subsetsWithDup(...))\n"
   },
   {
    "id": 75,
@@ -920,7 +994,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/combination-sum-ii/",
    "video_url": "https://www.youtube.com/watch?v=rSA3t6BDDwg",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0040-combination-sum-ii.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0040-combination-sum-ii.py",
+   "starter": "class Solution:\n    def combinationSum2(self, candidates: List[int], target: int) -> List[List[int]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().combinationSum2(...))\n"
   },
   {
    "id": 76,
@@ -932,7 +1007,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/word-search/",
    "video_url": "https://www.youtube.com/watch?v=pfiQ_PS1g8E",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0079-word-search.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0079-word-search.py",
+   "starter": "class Solution:\n    def exist(self, board: List[List[str]], word: str) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().exist(...))\n"
   },
   {
    "id": 77,
@@ -944,7 +1020,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/palindrome-partitioning/",
    "video_url": "https://www.youtube.com/watch?v=3jvWodd7ht0",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0131-palindrome-partitioning.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0131-palindrome-partitioning.py",
+   "starter": "class Solution:\n    def partition(self, s: str) -> List[List[str]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().partition(...))\n"
   },
   {
    "id": 78,
@@ -956,7 +1033,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/letter-combinations-of-a-phone-number/",
    "video_url": "https://www.youtube.com/watch?v=0snEunUacZY",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0017-letter-combinations-of-a-phone-number.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0017-letter-combinations-of-a-phone-number.py",
+   "starter": "class Solution:\n    def letterCombinations(self, digits: str) -> List[str]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().letterCombinations(...))\n"
   },
   {
    "id": 79,
@@ -968,7 +1046,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/n-queens/",
    "video_url": "https://www.youtube.com/watch?v=Ph95IHmRp5M",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0051-n-queens.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0051-n-queens.py",
+   "starter": "class Solution:\n    def solveNQueens(self, n: int) -> List[List[str]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().solveNQueens(...))\n"
   },
   {
    "id": 80,
@@ -980,7 +1059,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/number-of-islands/",
    "video_url": "https://www.youtube.com/watch?v=pV2kpPD66nE",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0200-number-of-islands.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0200-number-of-islands.py",
+   "starter": "class Solution:\n    def numIslands(self, grid: List[List[str]]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().numIslands(...))\n"
   },
   {
    "id": 81,
@@ -992,7 +1072,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/clone-graph/",
    "video_url": "https://www.youtube.com/watch?v=mQeF6bN8hMk",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0133-clone-graph.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0133-clone-graph.py",
+   "starter": "# Definition for a Node (uncomment to test locally).\n# class Node:\n#     def __init__(self, val = 0, neighbors = None):\n#         self.val = val\n#         self.neighbors = neighbors if neighbors is not None else []\n\nclass Solution:\n    def cloneGraph(self, node: Optional['Node']) -> Optional['Node']:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().cloneGraph(...))\n"
   },
   {
    "id": 82,
@@ -1004,7 +1085,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/max-area-of-island/",
    "video_url": "https://www.youtube.com/watch?v=iJGr1OtmH0c",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0695-max-area-of-island.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0695-max-area-of-island.py",
+   "starter": "class Solution:\n    def maxAreaOfIsland(self, grid: List[List[int]]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().maxAreaOfIsland(...))\n"
   },
   {
    "id": 83,
@@ -1016,7 +1098,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/pacific-atlantic-water-flow/",
    "video_url": "https://www.youtube.com/watch?v=s-VkcjHqkGI",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0417-pacific-atlantic-water-flow.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0417-pacific-atlantic-water-flow.py",
+   "starter": "class Solution:\n    def pacificAtlantic(self, heights: List[List[int]]) -> List[List[int]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().pacificAtlantic(...))\n"
   },
   {
    "id": 84,
@@ -1028,7 +1111,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/surrounded-regions/",
    "video_url": "https://www.youtube.com/watch?v=9z2BunfoZ5Y",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0130-surrounded-regions.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0130-surrounded-regions.py",
+   "starter": "class Solution:\n    def solve(self, board: List[List[str]]) -> None:\n        \"\"\"\n        Do not return anything, modify board in-place instead.\n        \"\"\"\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().solve(...))\n"
   },
   {
    "id": 85,
@@ -1040,7 +1124,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/rotting-oranges/",
    "video_url": "https://www.youtube.com/watch?v=y704fEOx0s0",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0994-rotting-oranges.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0994-rotting-oranges.py",
+   "starter": "class Solution:\n    def orangesRotting(self, grid: List[List[int]]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().orangesRotting(...))\n"
   },
   {
    "id": 86,
@@ -1052,7 +1137,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/walls-and-gates/",
    "video_url": "https://www.youtube.com/watch?v=e69C6xhiSQE",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0286-walls-and-gates.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0286-walls-and-gates.py",
+   "starter": "class Solution:\n    def wallsAndGates(self, rooms: List[List[int]]) -> None:\n        \"\"\"\n        Do not return anything, modify rooms in-place instead.\n        \"\"\"\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().wallsAndGates(...))\n"
   },
   {
    "id": 87,
@@ -1064,7 +1150,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/course-schedule/",
    "video_url": "https://www.youtube.com/watch?v=EgI5nU9etnU",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0207-course-schedule.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0207-course-schedule.py",
+   "starter": "class Solution:\n    def canFinish(self, numCourses: int, prerequisites: List[List[int]]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().canFinish(...))\n"
   },
   {
    "id": 88,
@@ -1076,7 +1163,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/course-schedule-ii/",
    "video_url": "https://www.youtube.com/watch?v=Akt3glAwyfY",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0210-course-schedule-ii.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0210-course-schedule-ii.py",
+   "starter": "class Solution:\n    def findOrder(self, numCourses: int, prerequisites: List[List[int]]) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().findOrder(...))\n"
   },
   {
    "id": 89,
@@ -1088,7 +1176,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/redundant-connection/",
    "video_url": "https://www.youtube.com/watch?v=FXWRE67PLL0",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0684-redundant-connection.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0684-redundant-connection.py",
+   "starter": "class Solution:\n    def findRedundantConnection(self, edges: List[List[int]]) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().findRedundantConnection(...))\n"
   },
   {
    "id": 90,
@@ -1100,7 +1189,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/number-of-connected-components-in-an-undirected-graph/",
    "video_url": "https://www.youtube.com/watch?v=8f1XPm4WOUc",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0323-number-of-connected-components-in-an-undirected-graph.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0323-number-of-connected-components-in-an-undirected-graph.py",
+   "starter": "class Solution:\n    def countComponents(self, n: int, edges: List[List[int]]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().countComponents(...))\n"
   },
   {
    "id": 91,
@@ -1112,7 +1202,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/graph-valid-tree/",
    "video_url": "https://www.youtube.com/watch?v=bXsUuownnoQ",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0261-graph-valid-tree.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0261-graph-valid-tree.py",
+   "starter": "class Solution:\n    def validTree(self, n: int, edges: List[List[int]]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().validTree(...))\n"
   },
   {
    "id": 92,
@@ -1124,7 +1215,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/word-ladder/",
    "video_url": "https://www.youtube.com/watch?v=h9iTnkgv05E",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0127-word-ladder.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0127-word-ladder.py",
+   "starter": "class Solution:\n    def ladderLength(self, beginWord: str, endWord: str, wordList: List[str]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().ladderLength(...))\n"
   },
   {
    "id": 93,
@@ -1136,7 +1228,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/reconstruct-itinerary/",
    "video_url": "https://www.youtube.com/watch?v=ZyB_gQ8vqGA",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0332-reconstruct-itinerary.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0332-reconstruct-itinerary.py",
+   "starter": "class Solution:\n    def findItinerary(self, tickets: List[List[str]]) -> List[str]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().findItinerary(...))\n"
   },
   {
    "id": 94,
@@ -1148,7 +1241,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/min-cost-to-connect-all-points/",
    "video_url": "https://www.youtube.com/watch?v=f7JOBJIC-NA",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1584-min-cost-to-connect-all-points.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1584-min-cost-to-connect-all-points.py",
+   "starter": "class Solution:\n    def minCostConnectPoints(self, points: List[List[int]]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().minCostConnectPoints(...))\n"
   },
   {
    "id": 95,
@@ -1160,7 +1254,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/network-delay-time/",
    "video_url": "https://www.youtube.com/watch?v=EaphyqKU4PQ",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0743-network-delay-time.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0743-network-delay-time.py",
+   "starter": "class Solution:\n    def networkDelayTime(self, times: List[List[int]], n: int, k: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().networkDelayTime(...))\n"
   },
   {
    "id": 96,
@@ -1172,7 +1267,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/swim-in-rising-water/",
    "video_url": "https://www.youtube.com/watch?v=amvrKlMLuGY",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0778-swim-in-rising-water.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0778-swim-in-rising-water.py",
+   "starter": "class Solution:\n    def swimInWater(self, grid: List[List[int]]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().swimInWater(...))\n"
   },
   {
    "id": 97,
@@ -1184,7 +1280,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/alien-dictionary/",
    "video_url": "https://www.youtube.com/watch?v=6kTZYvNNyps",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0269-alien-dictionary.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0269-alien-dictionary.py",
+   "starter": "class Solution:\n    def alienOrder(self, words: List[str]) -> str:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().alienOrder(...))\n"
   },
   {
    "id": 98,
@@ -1196,7 +1293,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/cheapest-flights-within-k-stops/",
    "video_url": "https://www.youtube.com/watch?v=5eIK3zUdYmE",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0787-cheapest-flights-within-k-stops.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0787-cheapest-flights-within-k-stops.py",
+   "starter": "class Solution:\n    def findCheapestPrice(self, n: int, flights: List[List[int]], src: int, dst: int, k: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().findCheapestPrice(...))\n"
   },
   {
    "id": 99,
@@ -1208,7 +1306,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/climbing-stairs/",
    "video_url": "https://www.youtube.com/watch?v=Y0lT9Fck7qI",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0070-climbing-stairs.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0070-climbing-stairs.py",
+   "starter": "class Solution:\n    def climbStairs(self, n: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().climbStairs(...))\n"
   },
   {
    "id": 100,
@@ -1220,7 +1319,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/min-cost-climbing-stairs/",
    "video_url": "https://www.youtube.com/watch?v=ktmzAZWkEZ0",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0746-min-cost-climbing-stairs.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0746-min-cost-climbing-stairs.py",
+   "starter": "class Solution:\n    def minCostClimbingStairs(self, cost: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().minCostClimbingStairs(...))\n"
   },
   {
    "id": 101,
@@ -1232,7 +1332,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/house-robber/",
    "video_url": "https://www.youtube.com/watch?v=73r3KWiEvyk",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0198-house-robber.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0198-house-robber.py",
+   "starter": "class Solution:\n    def rob(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().rob(...))\n"
   },
   {
    "id": 102,
@@ -1244,7 +1345,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/house-robber-ii/",
    "video_url": "https://www.youtube.com/watch?v=rWAJCfYYOvM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0213-house-robber-ii.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0213-house-robber-ii.py",
+   "starter": "class Solution:\n    def rob(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().rob(...))\n"
   },
   {
    "id": 103,
@@ -1256,7 +1358,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/longest-palindromic-substring/",
    "video_url": "https://www.youtube.com/watch?v=XYQecbcd6_c",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0005-longest-palindromic-substring.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0005-longest-palindromic-substring.py",
+   "starter": "class Solution:\n    def longestPalindrome(self, s: str) -> str:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().longestPalindrome(...))\n"
   },
   {
    "id": 104,
@@ -1268,7 +1371,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/palindromic-substrings/",
    "video_url": "https://www.youtube.com/watch?v=4RACzI5-du8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0647-palindromic-substrings.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0647-palindromic-substrings.py",
+   "starter": "class Solution:\n    def countSubstrings(self, s: str) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().countSubstrings(...))\n"
   },
   {
    "id": 105,
@@ -1280,7 +1384,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/decode-ways/",
    "video_url": "https://www.youtube.com/watch?v=6aEyTjOwlJU",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0091-decode-ways.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0091-decode-ways.py",
+   "starter": "class Solution:\n    def numDecodings(self, s: str) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().numDecodings(...))\n"
   },
   {
    "id": 106,
@@ -1292,7 +1397,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/coin-change/",
    "video_url": "https://www.youtube.com/watch?v=H9bfqozjoqs",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0322-coin-change.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0322-coin-change.py",
+   "starter": "class Solution:\n    def coinChange(self, coins: List[int], amount: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().coinChange(...))\n"
   },
   {
    "id": 107,
@@ -1304,7 +1410,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/maximum-product-subarray/",
    "video_url": "https://www.youtube.com/watch?v=lXVy6YWFcRM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0152-maximum-product-subarray.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0152-maximum-product-subarray.py",
+   "starter": "class Solution:\n    def maxProduct(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().maxProduct(...))\n"
   },
   {
    "id": 108,
@@ -1316,7 +1423,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/word-break/",
    "video_url": "https://www.youtube.com/watch?v=Sx9NNgInc3A",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0139-word-break.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0139-word-break.py",
+   "starter": "class Solution:\n    def wordBreak(self, s: str, wordDict: List[str]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().wordBreak(...))\n"
   },
   {
    "id": 109,
@@ -1328,7 +1436,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/longest-increasing-subsequence/",
    "video_url": "https://www.youtube.com/watch?v=cjWnW0hdF1Y",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0300-longest-increasing-subsequence.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0300-longest-increasing-subsequence.py",
+   "starter": "class Solution:\n    def lengthOfLIS(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().lengthOfLIS(...))\n"
   },
   {
    "id": 110,
@@ -1340,7 +1449,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/partition-equal-subset-sum/",
    "video_url": "https://www.youtube.com/watch?v=IsvocB5BJhw",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0416-partition-equal-subset-sum.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0416-partition-equal-subset-sum.py",
+   "starter": "class Solution:\n    def canPartition(self, nums: List[int]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().canPartition(...))\n"
   },
   {
    "id": 111,
@@ -1352,7 +1462,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/unique-paths/",
    "video_url": "https://www.youtube.com/watch?v=IlEsdxuD4lY",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0062-unique-paths.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0062-unique-paths.py",
+   "starter": "class Solution:\n    def uniquePaths(self, m: int, n: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().uniquePaths(...))\n"
   },
   {
    "id": 112,
@@ -1364,7 +1475,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/longest-common-subsequence/",
    "video_url": "https://www.youtube.com/watch?v=Ua0GhsJSlWM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1143-longest-common-subsequence.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1143-longest-common-subsequence.py",
+   "starter": "class Solution:\n    def longestCommonSubsequence(self, text1: str, text2: str) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().longestCommonSubsequence(...))\n"
   },
   {
    "id": 113,
@@ -1376,7 +1488,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/best-time-to-buy-and-sell-stock-with-cooldown/",
    "video_url": "https://www.youtube.com/watch?v=I7j0F7AHpb8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0309-best-time-to-buy-and-sell-stock-with-cooldown.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0309-best-time-to-buy-and-sell-stock-with-cooldown.py",
+   "starter": "class Solution:\n    def maxProfit(self, prices: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().maxProfit(...))\n"
   },
   {
    "id": 114,
@@ -1388,7 +1501,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/coin-change-ii/",
    "video_url": "https://www.youtube.com/watch?v=Mjy4hd2xgrs",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0518-coin-change-ii.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0518-coin-change-ii.py",
+   "starter": "class Solution:\n    def change(self, amount: int, coins: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().change(...))\n"
   },
   {
    "id": 115,
@@ -1400,7 +1514,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/target-sum/",
    "video_url": "https://www.youtube.com/watch?v=g0npyaQtAQM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0494-target-sum.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0494-target-sum.py",
+   "starter": "class Solution:\n    def findTargetSumWays(self, nums: List[int], target: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().findTargetSumWays(...))\n"
   },
   {
    "id": 116,
@@ -1412,7 +1527,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/interleaving-string/",
    "video_url": "https://www.youtube.com/watch?v=3Rw3p9LrgvE",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0097-interleaving-string.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0097-interleaving-string.py",
+   "starter": "class Solution:\n    def isInterleave(self, s1: str, s2: str, s3: str) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isInterleave(...))\n"
   },
   {
    "id": 117,
@@ -1424,7 +1540,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/longest-increasing-path-in-a-matrix/",
    "video_url": "https://www.youtube.com/watch?v=wCc_nd-GiEc",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0329-longest-increasing-path-in-a-matrix.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0329-longest-increasing-path-in-a-matrix.py",
+   "starter": "class Solution:\n    def longestIncreasingPath(self, matrix: List[List[int]]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().longestIncreasingPath(...))\n"
   },
   {
    "id": 118,
@@ -1436,7 +1553,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/distinct-subsequences/",
    "video_url": "https://www.youtube.com/watch?v=-RDzMJ33nx8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0115-distinct-subsequences.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0115-distinct-subsequences.py",
+   "starter": "class Solution:\n    def numDistinct(self, s: str, t: str) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().numDistinct(...))\n"
   },
   {
    "id": 119,
@@ -1448,7 +1566,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/edit-distance/",
    "video_url": "https://www.youtube.com/watch?v=XYi2-LPrwm4",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0072-edit-distance.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0072-edit-distance.py",
+   "starter": "class Solution:\n    def minDistance(self, word1: str, word2: str) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().minDistance(...))\n"
   },
   {
    "id": 120,
@@ -1460,7 +1579,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/burst-balloons/",
    "video_url": "https://www.youtube.com/watch?v=VFskby7lUbw",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0312-burst-balloons.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0312-burst-balloons.py",
+   "starter": "class Solution:\n    def maxCoins(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().maxCoins(...))\n"
   },
   {
    "id": 121,
@@ -1472,7 +1592,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/regular-expression-matching/",
    "video_url": "https://www.youtube.com/watch?v=HAA8mgxlov8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0010-regular-expression-matching.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0010-regular-expression-matching.py",
+   "starter": "class Solution:\n    def isMatch(self, s: str, p: str) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isMatch(...))\n"
   },
   {
    "id": 122,
@@ -1484,7 +1605,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/maximum-subarray/",
    "video_url": "https://www.youtube.com/watch?v=5WZl3MMT0Eg",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0053-maximum-subarray.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0053-maximum-subarray.py",
+   "starter": "class Solution:\n    def maxSubArray(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().maxSubArray(...))\n"
   },
   {
    "id": 123,
@@ -1496,7 +1618,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/jump-game/",
    "video_url": "https://www.youtube.com/watch?v=Yan0cv2cLy8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0055-jump-game.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0055-jump-game.py",
+   "starter": "class Solution:\n    def canJump(self, nums: List[int]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().canJump(...))\n"
   },
   {
    "id": 124,
@@ -1508,7 +1631,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/jump-game-ii/",
    "video_url": "https://www.youtube.com/watch?v=dJ7sWiOoK7g",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0045-jump-game-ii.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0045-jump-game-ii.py",
+   "starter": "class Solution:\n    def jump(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().jump(...))\n"
   },
   {
    "id": 125,
@@ -1520,7 +1644,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/gas-station/",
    "video_url": "https://www.youtube.com/watch?v=lJwbPZGo05A",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0134-gas-station.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0134-gas-station.py",
+   "starter": "class Solution:\n    def canCompleteCircuit(self, gas: List[int], cost: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().canCompleteCircuit(...))\n"
   },
   {
    "id": 126,
@@ -1532,7 +1657,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/hand-of-straights/",
    "video_url": "https://www.youtube.com/watch?v=amnrMCVd2YI",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0846-hand-of-straights.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0846-hand-of-straights.py",
+   "starter": "class Solution:\n    def isNStraightHand(self, hand: List[int], groupSize: int) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isNStraightHand(...))\n"
   },
   {
    "id": 127,
@@ -1544,7 +1670,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/merge-triplets-to-form-target-triplet/",
    "video_url": "https://www.youtube.com/watch?v=kShkQLQZ9K4",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1899-merge-triplets-to-form-target-triplet.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1899-merge-triplets-to-form-target-triplet.py",
+   "starter": "class Solution:\n    def mergeTriplets(self, triplets: List[List[int]], target: List[int]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().mergeTriplets(...))\n"
   },
   {
    "id": 128,
@@ -1556,7 +1683,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/partition-labels/",
    "video_url": "https://www.youtube.com/watch?v=B7m8UmZE-vw",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0763-partition-labels.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0763-partition-labels.py",
+   "starter": "class Solution:\n    def partitionLabels(self, s: str) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().partitionLabels(...))\n"
   },
   {
    "id": 129,
@@ -1568,7 +1696,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/valid-parenthesis-string/",
    "video_url": "https://www.youtube.com/watch?v=QhPdNS143Qg",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0678-valid-parenthesis-string.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0678-valid-parenthesis-string.py",
+   "starter": "class Solution:\n    def checkValidString(self, s: str) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().checkValidString(...))\n"
   },
   {
    "id": 130,
@@ -1580,7 +1709,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/insert-interval/",
    "video_url": "https://www.youtube.com/watch?v=A8NUOmlwOlM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0057-insert-interval.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0057-insert-interval.py",
+   "starter": "class Solution:\n    def insert(self, intervals: List[List[int]], newInterval: List[int]) -> List[List[int]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().insert(...))\n"
   },
   {
    "id": 131,
@@ -1592,7 +1722,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/merge-intervals/",
    "video_url": "https://www.youtube.com/watch?v=44H3cEC2fFM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0056-merge-intervals.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0056-merge-intervals.py",
+   "starter": "class Solution:\n    def merge(self, intervals: List[List[int]]) -> List[List[int]]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().merge(...))\n"
   },
   {
    "id": 132,
@@ -1604,7 +1735,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/non-overlapping-intervals/",
    "video_url": "https://www.youtube.com/watch?v=nONCGxWoUfM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0435-non-overlapping-intervals.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0435-non-overlapping-intervals.py",
+   "starter": "class Solution:\n    def eraseOverlapIntervals(self, intervals: List[List[int]]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().eraseOverlapIntervals(...))\n"
   },
   {
    "id": 133,
@@ -1616,7 +1748,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/meeting-rooms/",
    "video_url": "https://www.youtube.com/watch?v=PaJxqZVPhbg",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0252-meeting-rooms.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0252-meeting-rooms.py",
+   "starter": "class Solution:\n    def canAttendMeetings(self, intervals: List[List[int]]) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().canAttendMeetings(...))\n"
   },
   {
    "id": 134,
@@ -1628,7 +1761,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/meeting-rooms-ii/",
    "video_url": "https://www.youtube.com/watch?v=FdzJmTCVyJU",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0253-meeting-rooms-ii.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0253-meeting-rooms-ii.py",
+   "starter": "class Solution:\n    def minMeetingRooms(self, intervals: List[List[int]]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().minMeetingRooms(...))\n"
   },
   {
    "id": 135,
@@ -1640,7 +1774,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/minimum-interval-to-include-each-query/",
    "video_url": "https://www.youtube.com/watch?v=5hQ5WWW5awQ",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1851-minimum-interval-to-include-each-query.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/1851-minimum-interval-to-include-each-query.py",
+   "starter": "class Solution:\n    def minInterval(self, intervals: List[List[int]], queries: List[int]) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().minInterval(...))\n"
   },
   {
    "id": 136,
@@ -1652,7 +1787,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/rotate-image/",
    "video_url": "https://www.youtube.com/watch?v=fMSJSS7eO1w",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0048-rotate-image.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0048-rotate-image.py",
+   "starter": "class Solution:\n    def rotate(self, matrix: List[List[int]]) -> None:\n        \"\"\"\n        Do not return anything, modify matrix in-place instead.\n        \"\"\"\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().rotate(...))\n"
   },
   {
    "id": 137,
@@ -1664,7 +1800,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/spiral-matrix/",
    "video_url": "https://www.youtube.com/watch?v=BJnMZNwUk1M",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0054-spiral-matrix.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0054-spiral-matrix.py",
+   "starter": "class Solution:\n    def spiralOrder(self, matrix: List[List[int]]) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().spiralOrder(...))\n"
   },
   {
    "id": 138,
@@ -1676,7 +1813,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/set-matrix-zeroes/",
    "video_url": "https://www.youtube.com/watch?v=T41rL0L3Pnw",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0073-set-matrix-zeroes.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0073-set-matrix-zeroes.py",
+   "starter": "class Solution:\n    def setZeroes(self, matrix: List[List[int]]) -> None:\n        \"\"\"\n        Do not return anything, modify matrix in-place instead.\n        \"\"\"\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().setZeroes(...))\n"
   },
   {
    "id": 139,
@@ -1688,7 +1826,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/happy-number/",
    "video_url": "https://www.youtube.com/watch?v=ljz85bxOYJ0",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0202-happy-number.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0202-happy-number.py",
+   "starter": "class Solution:\n    def isHappy(self, n: int) -> bool:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().isHappy(...))\n"
   },
   {
    "id": 140,
@@ -1700,7 +1839,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/plus-one/",
    "video_url": "https://www.youtube.com/watch?v=jIaA8boiG1s",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0066-plus-one.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0066-plus-one.py",
+   "starter": "class Solution:\n    def plusOne(self, digits: List[int]) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().plusOne(...))\n"
   },
   {
    "id": 141,
@@ -1712,7 +1852,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/powx-n/",
    "video_url": "https://www.youtube.com/watch?v=g9YQyYi4IQQ",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0050-powx-n.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0050-powx-n.py",
+   "starter": "class Solution:\n    def myPow(self, x: float, n: int) -> float:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().myPow(...))\n"
   },
   {
    "id": 142,
@@ -1724,7 +1865,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/multiply-strings/",
    "video_url": "https://www.youtube.com/watch?v=1vZswirL8Y8",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0043-multiply-strings.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0043-multiply-strings.py",
+   "starter": "class Solution:\n    def multiply(self, num1: str, num2: str) -> str:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().multiply(...))\n"
   },
   {
    "id": 143,
@@ -1736,7 +1878,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/detect-squares/",
    "video_url": "https://www.youtube.com/watch?v=bahebearrDc",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/2013-detect-squares.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/2013-detect-squares.py",
+   "starter": "class DetectSquares:\n\n    def __init__(self):\n        pass\n\n    def add(self, point: List[int]) -> None:\n        pass\n\n    def count(self, point: List[int]) -> int:\n        pass\n\n\n# Your DetectSquares object will be instantiated and called as such:\n# obj = DetectSquares()\n# obj.add(point)\n# param_2 = obj.count(point)\n"
   },
   {
    "id": 144,
@@ -1748,7 +1891,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/single-number/",
    "video_url": "https://www.youtube.com/watch?v=qMPX1AOa83k",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0136-single-number.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0136-single-number.py",
+   "starter": "class Solution:\n    def singleNumber(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().singleNumber(...))\n"
   },
   {
    "id": 145,
@@ -1760,7 +1904,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/number-of-1-bits/",
    "video_url": "https://www.youtube.com/watch?v=5Km3utixwZs",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0191-number-of-1-bits.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0191-number-of-1-bits.py",
+   "starter": "class Solution:\n    def hammingWeight(self, n: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().hammingWeight(...))\n"
   },
   {
    "id": 146,
@@ -1772,7 +1917,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/counting-bits/",
    "video_url": "https://www.youtube.com/watch?v=RyBM56RIWrM",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0338-counting-bits.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0338-counting-bits.py",
+   "starter": "class Solution:\n    def countBits(self, n: int) -> List[int]:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().countBits(...))\n"
   },
   {
    "id": 147,
@@ -1784,7 +1930,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/reverse-bits/",
    "video_url": "https://www.youtube.com/watch?v=UcoN6UjAI64",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0190-reverse-bits.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0190-reverse-bits.py",
+   "starter": "class Solution:\n    def reverseBits(self, n: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().reverseBits(...))\n"
   },
   {
    "id": 148,
@@ -1796,7 +1943,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/missing-number/",
    "video_url": "https://www.youtube.com/watch?v=WnPLSRLSANE",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0268-missing-number.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0268-missing-number.py",
+   "starter": "class Solution:\n    def missingNumber(self, nums: List[int]) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().missingNumber(...))\n"
   },
   {
    "id": 149,
@@ -1808,7 +1956,8 @@
    "blind75": true,
    "leetcode_url": "https://leetcode.com/problems/sum-of-two-integers/",
    "video_url": "https://www.youtube.com/watch?v=gVUrDV4tZfY",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0371-sum-of-two-integers.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0371-sum-of-two-integers.py",
+   "starter": "class Solution:\n    def getSum(self, a: int, b: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().getSum(...))\n"
   },
   {
    "id": 150,
@@ -1820,7 +1969,8 @@
    "blind75": false,
    "leetcode_url": "https://leetcode.com/problems/reverse-integer/",
    "video_url": "https://www.youtube.com/watch?v=HAgLH58IgJQ",
-   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0007-reverse-integer.py"
+   "solution_url": "https://github.com/neetcode-gh/leetcode/blob/main/python/0007-reverse-integer.py",
+   "starter": "class Solution:\n    def reverse(self, x: int) -> int:\n        pass\n\n\n# Try it (Ctrl+Enter to run):\n# print(Solution().reverse(...))\n"
   }
  ]
 }

@@ -91,6 +91,21 @@ def _match_library_problems(library_problems: list[dict], nc_problems: list[dict
     return best
 
 
+def starter_for(problem: dict) -> str | None:
+    """LeetCode-style starter code for a library problem, if it's one of the NeetCode
+    150 (matched by its LeetCode link, else by exact title, like the tracker), else
+    None. Built by tools/neetcode/build_scaffolds.py; works for either deck."""
+    nc_problems = get_data()["problems"]
+    slug = extract_leetcode_slug(problem.get("url"))
+    match = None
+    if slug:
+        match = next((p for p in nc_problems if p["slug"] == slug), None)
+    if match is None:
+        title = _norm_title(problem.get("title", ""))
+        match = next((p for p in nc_problems if _norm_title(p["title"]) == title), None)
+    return match.get("starter") if match else None
+
+
 def _status_for(lp: dict | None) -> str:
     if lp is None:
         return "not_started"
@@ -158,7 +173,11 @@ def build_tracker(library_problems: list[dict]) -> dict:
     for nc in nc_problems:
         lp = matched.get(nc["id"])
         tracker_status = _status_for(lp)
-        problems_out.append({**nc, "status": tracker_status, "problem": _problem_summary(lp) if lp else None})
+        # "starter" (the editor's starter code) is left out: the tracker page doesn't need
+        # it, and it's served per problem instead (see starter_for).
+        nc_fields = {k: v for k, v in nc.items() if k != "starter"}
+        problems_out.append({**nc_fields, "status": tracker_status,
+                             "problem": _problem_summary(lp) if lp else None})
 
         cat = cat_stats[nc["category"]]
         cat["total"] += 1

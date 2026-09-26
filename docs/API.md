@@ -57,6 +57,13 @@ header are refused (CSRF / DNS-rebinding protection).
 }
 ```
 
+Every response that returns one full problem (`GET`, `POST`, `PATCH` on a problem, `/review`,
+`/undo`) also includes `"starter_code": "class Solution: ..." | null`: LeetCode-style starter
+code (class and method signatures, bodies `pass`) when the problem is one of the NeetCode 150,
+matched by its LeetCode link or exact title, in either deck; `null` otherwise. It comes from the
+`starter` field of `app/neetcode150.json` (regenerate with `tools/neetcode/build_scaffolds.py`);
+`GET /api/neetcode` leaves that field out.
+
 ## Deck scope (`deck=` query param)
 
 `GET /api/problems`, `GET /api/queue`, `GET /api/summary` and `GET /api/tags` all take an
