@@ -18,11 +18,10 @@ from pathlib import Path
 import scheduling as sched
 from scheduling import Card, ReviewLog, Rating, SchedulerSettings
 
-SCHEMA_VERSION = 4   # 2 = study-day clock; 3 = adds problems.deck; 4 = adds drafts table
+SCHEMA_VERSION = 5   # 2 = study-day clock; 3 = adds problems.deck; 4 = adds drafts table; 5 = adds reviews.deck
 DRAFT_CODE_LIMIT = 100000
 DIFFICULTIES = ("", "Easy", "Medium", "Hard")
-DECKS = ("main", "neetcode")
-DECK_ORDER = ("main", "neetcode")   # order new problems / results are combined in
+DECKS = ("main", "neetcode")   # also the order new problems / per-deck results are combined in
 TEXT_LIMITS = {
     "title": 200, "url": 2000, "source": 100, "prompt": 20000,
     "insight": 1000, "notes": 50000, "solution": 100000, "language": 40,
@@ -71,7 +70,8 @@ CREATE TABLE IF NOT EXISTS reviews (
     duration_ms  INTEGER,
     card_before  TEXT NOT NULL,
     card_after   TEXT NOT NULL,
-    kind         TEXT NOT NULL DEFAULT 'review'  -- 'added' = rating given when the problem was added
+    kind         TEXT NOT NULL DEFAULT 'review',  -- 'added' = rating given when the problem was added
+    deck         TEXT  -- the problem's deck when this review happened; nullable (older rows, before SCHEMA_VERSION 5)
 );
 CREATE INDEX IF NOT EXISTS idx_reviews_problem ON reviews(problem_id, reviewed_at);
 CREATE TABLE IF NOT EXISTS settings (
@@ -188,11 +188,17 @@ class Store:
             if version < 2 and c.execute("SELECT 1 FROM reviews LIMIT 1").fetchone():
                 # Older databases stored real timestamps in the FSRS cards: replay them.
                 self._reschedule_all(c, self.scheduler_settings(self._settings_from(c)))
-            # Idempotent column migration (checked by name, not by version, so it's safe
-            # even if user_version and the actual schema ever get out of step).
+            # Idempotent column migrations (checked by name, not by version, so they're
+            # safe even if user_version and the actual schema ever get out of step).
             cols = {row["name"] for row in c.execute("PRAGMA table_info(problems)")}
             if "deck" not in cols:
                 c.execute("ALTER TABLE problems ADD COLUMN deck TEXT NOT NULL DEFAULT 'main'")
+            review_cols = {row["name"] for row in c.execute("PRAGMA table_info(reviews)")}
+            if "deck" not in review_cols:
+                # Nullable, and deliberately not backfilled: queue()'s "introduced today"
+                # count falls back to the problem's current deck (COALESCE) for any row
+                # that has no deck of its own, which is exactly the old (pre-fix) behavior.
+                c.execute("ALTER TABLE reviews ADD COLUMN deck TEXT")
             if version != SCHEMA_VERSION:
                 c.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
@@ -455,7 +461,7 @@ class Store:
         if scope == "neetcode":
             return ("neetcode",)
         if scope == "all":
-            return DECK_ORDER
+            return DECKS
         raise Invalid("deck must be one of: main, neetcode, all")
 
     # ------------------------------------------------------------------ queries
@@ -549,24 +555,30 @@ class Store:
         limits = {"main": int(settings["new_per_day"]), "neetcode": int(settings["neetcode_new_per_day"])}
         new_by_deck = {
             d: sorted((p for p in items if p["status"] == "new" and p["deck"] == d), key=lambda p: p["id"])
-            for d in DECK_ORDER
+            for d in DECKS
         }
         with self.conn() as c:
             # Only count problems that came out of the "new" queue, not ones you added
             # right after solving them. (Parsed in Python: older SQLite builds lack JSON functions.)
+            # COALESCE(r.deck, p.deck): a review's own deck (set at the time it happened)
+            # decides which deck's daily limit it counted against, so moving a problem to
+            # another deck later can't reset or dodge that limit. Falls back to the
+            # problem's current deck for older rows from before reviews had their own
+            # deck column (see SCHEMA_VERSION 5) - the same lookup this always used.
             introduced = {}
             for d in decks:
                 introduced[d] = sum(
                     1 for (before,) in c.execute(
                         "SELECT r.card_before FROM reviews r JOIN problems p ON p.id = r.problem_id "
-                        "WHERE r.kind = 'review' AND p.deck = ? AND r.reviewed_at >= ? AND r.reviewed_at < ?",
+                        "WHERE r.kind = 'review' AND COALESCE(r.deck, p.deck) = ? "
+                        "AND r.reviewed_at >= ? AND r.reviewed_at < ?",
                         (d, _iso(day_start), _iso(day_end)),
                     )
                     if json.loads(before).get("last_review") is None
                 )
 
         new_out, new_left_total, new_waiting_total, introduced_total = [], 0, 0, 0
-        for d in DECK_ORDER:
+        for d in DECKS:
             if d not in decks:
                 continue
             left = max(0, limits[d] - introduced[d])
@@ -596,7 +608,7 @@ class Store:
 
         # deck_counts: always over ALL active problems, regardless of scope/toggle,
         # so the nav can show a per-deck badge no matter which page you're on.
-        deck_counts = {d: {"total": 0, "due": 0, "new": 0} for d in DECK_ORDER}
+        deck_counts = {d: {"total": 0, "due": 0, "new": 0} for d in DECKS}
         for p in all_items:
             if p["suspended"]:
                 continue
@@ -760,17 +772,17 @@ class Store:
 
     def _review_in(self, c, pid: int, rating: int, duration_ms, kind: str,
                    ss: SchedulerSettings, now: datetime) -> None:
-        row = c.execute("SELECT card FROM problems WHERE id = ?", (pid,)).fetchone()
+        row = c.execute("SELECT card, deck FROM problems WHERE id = ?", (pid,)).fetchone()
         if not row:
             raise NotFound(f"problem {pid} not found")
         before = sched.card_from_json(row["card"])
         before.card_id = pid
         after, _log = sched.review(before, rating, ss, now, duration_ms)
         c.execute(
-            "INSERT INTO reviews (problem_id, rating, reviewed_at, duration_ms, card_before, card_after, kind) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO reviews (problem_id, rating, reviewed_at, duration_ms, card_before, card_after, kind, deck) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (pid, rating, _iso(now), duration_ms, sched.card_to_json(before),
-             sched.card_to_json(after), kind),
+             sched.card_to_json(after), kind, row["deck"]),
         )
         c.execute(
             "UPDATE problems SET card = ?, due = ? WHERE id = ?",
@@ -906,6 +918,7 @@ class Store:
         with self.conn() as c:
             existing = {r["uid"] for r in c.execute("SELECT uid FROM problems")}
             id_by_uid = {}
+            deck_by_uid = {}  # for stamping imported reviews with the (just-imported) problem's deck
             for i, p in enumerate(problems, 1):
                 try:
                     uid = p.get("uid")
@@ -933,6 +946,7 @@ class Store:
                 card.card_id = pid
                 c.execute("UPDATE problems SET card = ? WHERE id = ?", (sched.card_to_json(card), pid))
                 id_by_uid[uid] = pid
+                deck_by_uid[uid] = fields["deck"]
                 existing.add(uid)
                 added += 1
             for i, r in enumerate(reviews, 1):
@@ -952,10 +966,11 @@ class Store:
                 except (Invalid, KeyError, TypeError, ValueError, AttributeError, OverflowError):
                     continue  # a bad history entry only loses that entry, not the problem
                 c.execute(
-                    "INSERT INTO reviews (problem_id, rating, reviewed_at, duration_ms, card_before, card_after, kind) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO reviews (problem_id, rating, reviewed_at, duration_ms, card_before, card_after, kind, deck) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (pid, rating, _iso(reviewed_at), duration, sched.card_to_json(before),
-                     sched.card_to_json(after), "added" if r.get("kind") == "added" else "review"),
+                     sched.card_to_json(after), "added" if r.get("kind") == "added" else "review",
+                     deck_by_uid.get(r.get("problem_uid"))),
                 )
             for d in drafts:
                 try:

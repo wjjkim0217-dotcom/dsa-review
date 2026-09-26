@@ -261,15 +261,26 @@ def _run(code: str, stdin: str, timeout: float) -> dict:
                    threading.Thread(target=_drain, args=(proc.stderr, err_sink), daemon=True)]
         for t in readers:
             t.start()
-        try:
-            proc.stdin.write((stdin or "").encode("utf-8"))
-        except OSError:
-            pass  # the program exited without reading its input
-        finally:
+
+        def _write_stdin():
+            # Writing directly here would block until the child reads it - a pipe only
+            # buffers a small amount (often 64KB), so a larger stdin the child never
+            # reads (or reads slowly) would hang this call past `timeout`, past
+            # proc.wait() below, and past the caller's lock (see run_python). Doing the
+            # write on its own thread means the timeout below always fires on schedule
+            # regardless of how much of it the child ever reads.
             try:
-                proc.stdin.close()
+                proc.stdin.write((stdin or "").encode("utf-8"))
             except OSError:
-                pass
+                pass  # the program exited without reading its input
+            finally:
+                try:
+                    proc.stdin.close()
+                except OSError:
+                    pass
+
+        writer = threading.Thread(target=_write_stdin, daemon=True)
+        writer.start()
         timed_out = False
         try:
             proc.wait(timeout=timeout)
@@ -279,6 +290,16 @@ def _run(code: str, stdin: str, timeout: float) -> dict:
             proc.wait()
         for t in readers:
             t.join(timeout=5)
+        # The writer can still be blocked on a full pipe after a kill; killing the
+        # process closes its end, which unblocks (or errors) the write shortly after.
+        writer.join(timeout=5)
+        # Close explicitly (rather than leaving it to TemporaryDirectory/GC) now that
+        # the reader threads are done with them, so nothing warns about an unclosed pipe.
+        for stream in (proc.stdout, proc.stderr):
+            try:
+                stream.close()
+            except OSError:
+                pass
         duration_ms = int((time.monotonic() - start) * 1000)
 
         stdout = _decode(out_sink.get("data", b""))

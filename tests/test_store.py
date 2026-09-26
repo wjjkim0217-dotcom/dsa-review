@@ -1015,6 +1015,24 @@ class QueueTest(FrozenStoreTestCase):
         self.assertEqual(self.store.queue()["new_introduced_today"], 1)
         self.assertEqual(self.store.queue(scope="neetcode")["new_introduced_today"], 0)
 
+    def test_moving_introduced_problems_to_another_deck_does_not_reset_the_limit(self):
+        # Regression test: whether a review counts against a deck's daily "new" limit
+        # must be decided by the deck the problem was in AT THE TIME of that review, not
+        # whichever deck it happens to be in now - otherwise moving problems to another
+        # deck (e.g. "Move to NeetCode") resets or bypasses the limit that introduced them.
+        ids = [self.add(f"M{i}")["id"] for i in range(3)]  # default new_per_day is 3
+        for pid in ids:
+            self.store.review_problem(pid, 3)
+        self.assertEqual(self.store.queue()["new_left_today"], 0)
+        for pid in ids:
+            self.store.update_problem(pid, {"deck": "neetcode"})
+        # still 0 - those three reviews still count against the main deck's limit today,
+        # even though the problems themselves are no longer in the main deck
+        q = self.store.queue()
+        self.assertEqual((q["new_left_today"], q["new_introduced_today"]), (0, 3))
+        # and they don't ALSO eat into the neetcode deck's own, separate limit
+        self.assertEqual(self.store.queue(scope="neetcode")["new_introduced_today"], 0)
+
     def test_combined_queue_with_toggle_on_orders_main_then_neetcode(self):
         main_ids = [self.add(f"M{i}")["id"] for i in range(2)]
         nc_ids = [self.add(f"N{i}", deck="neetcode")["id"] for i in range(2)]
@@ -2300,6 +2318,75 @@ class DeckColumnMigrationTest(StoreTestCase):
         before = self.dump_problems()
         Store(self.db_path)
         self.assertEqual(self.dump_problems(), before)
+
+
+class ReviewsDeckColumnMigrationTest(StoreTestCase):
+    """A database from just before reviews.deck existed (SCHEMA_VERSION 4: problems.deck
+    and the drafts table are already there, only reviews.deck is missing)."""
+
+    def make_v4_db(self):
+        self.db_path = self.tmp / "legacy" / "dsa_review.db"
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        with connect(self.db_path) as c:
+            # A fresh Store() always creates the current (v5) schema, so build a v4 one
+            # by hand instead: same as SCHEMA in store.py, minus reviews.deck.
+            c.executescript("""
+                CREATE TABLE problems (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT, uid TEXT NOT NULL UNIQUE,
+                    title TEXT NOT NULL, url TEXT NOT NULL DEFAULT '', source TEXT NOT NULL DEFAULT '',
+                    difficulty TEXT NOT NULL DEFAULT '', tags TEXT NOT NULL DEFAULT '[]',
+                    prompt TEXT NOT NULL DEFAULT '', insight TEXT NOT NULL DEFAULT '',
+                    notes TEXT NOT NULL DEFAULT '', solution TEXT NOT NULL DEFAULT '',
+                    language TEXT NOT NULL DEFAULT 'python', suspended INTEGER NOT NULL DEFAULT 0,
+                    deck TEXT NOT NULL DEFAULT 'main', card TEXT NOT NULL, due TEXT NOT NULL,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+                );
+                CREATE TABLE reviews (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    problem_id INTEGER NOT NULL REFERENCES problems(id) ON DELETE CASCADE,
+                    rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 4),
+                    reviewed_at TEXT NOT NULL, duration_ms INTEGER,
+                    card_before TEXT NOT NULL, card_after TEXT NOT NULL,
+                    kind TEXT NOT NULL DEFAULT 'review'
+                );
+                CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+                CREATE TABLE drafts (
+                    problem_id INTEGER PRIMARY KEY REFERENCES problems(id) ON DELETE CASCADE,
+                    code TEXT NOT NULL, language TEXT NOT NULL DEFAULT 'python', updated_at TEXT NOT NULL
+                );
+            """)
+            now = utc(2026, 1, 1, 12).isoformat()
+            card = sched.new_card()
+            card.card_id = 1
+            c.execute(
+                "INSERT INTO problems (uid, title, deck, card, due, created_at, updated_at) "
+                "VALUES (?, 'Two Sum', 'main', ?, ?, ?, ?)",
+                (str(uuid.uuid4()), sched.card_to_json(card), now, now, now))
+            c.execute(
+                "INSERT INTO reviews (problem_id, rating, reviewed_at, card_before, card_after, kind) "
+                "VALUES (1, 3, ?, ?, ?, 'review')",
+                (now, sched.card_to_json(card), sched.card_to_json(card)))
+            c.execute(f"PRAGMA user_version = {SCHEMA_VERSION - 1}")
+
+    def test_reviews_deck_column_is_added_as_nullable_and_the_db_still_works(self):
+        self.make_v4_db()
+        store = Store(self.db_path)
+        with connect(self.db_path) as c:
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(reviews)")}
+            self.assertIn("deck", cols)
+            self.assertEqual(c.execute("PRAGMA user_version").fetchone()[0], SCHEMA_VERSION)
+            # not backfilled - the pre-existing review has no deck of its own
+            row = c.execute("SELECT deck FROM reviews WHERE id = 1").fetchone()
+            self.assertIsNone(row["deck"])
+        # the store still works normally: queue() falls back to the problem's current
+        # deck (COALESCE) for that old row, same as before the migration
+        q = store.queue()
+        self.assertEqual(q["new_introduced_today"], 0)  # reviewed_at is from 2026-01-01, not "today"
+        # and a fresh review on the same problem gets a deck of its own
+        store.review_problem(1, 3)
+        with connect(self.db_path) as c:
+            newest = c.execute("SELECT deck FROM reviews ORDER BY id DESC LIMIT 1").fetchone()
+            self.assertEqual(newest["deck"], "main")
 
 
 # ============================================================================ backup

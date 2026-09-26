@@ -104,6 +104,23 @@ class RunPythonTest(unittest.TestCase):
         self.assertEqual(r1["stdout"], "one\n")
         self.assertEqual(r2["stdout"], "two\n")
 
+    def test_large_stdin_with_non_reading_child_still_times_out_promptly(self):
+        # A pipe only buffers a small amount (often 64KB): writing 5 MB to a child that
+        # never reads its stdin would block the write forever if it happened inline
+        # (see _write_stdin in runner.py), which would also mean proc.wait(timeout)
+        # never gets a chance to run and the run lock never gets released.
+        big_stdin = "x" * (5 * 1024 * 1024)
+        start = time.monotonic()
+        r = runner.run_python("import time\ntime.sleep(5)", stdin=big_stdin, timeout=1)
+        elapsed = time.monotonic() - start
+        self.assertTrue(r["timed_out"])
+        self.assertIsNone(r["exit_code"])
+        self.assertLess(elapsed, 4)  # nowhere near the 5s sleep or the stdin write blocking forever
+
+        # The lock must have been released even though the stdin write never finished.
+        r2 = runner.run_python("print('still works')")
+        self.assertEqual(r2["stdout"], "still works\n")
+
 
 if __name__ == "__main__":
     unittest.main()

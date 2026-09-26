@@ -290,6 +290,7 @@ function menuButton({ label = 'More', icon: iconName = null, items, small = true
   const summary = h('summary', { class: `btn${small ? ' btn-sm' : ''} menu-trigger` }, iconName ? icon(iconName, 14) : null, label);
   const list = h('div', { class: 'menu-list', role: 'menu' });
   const det = h('details', { class: 'menu' }, summary, list);
+  let busy = false; // set via setBusy() below while an item's action is in flight
 
   function currentItems() {
     return typeof items === 'function' ? items() : items;
@@ -301,7 +302,7 @@ function menuButton({ label = 'More', icon: iconName = null, items, small = true
       type: 'button',
       class: `menu-item${it.danger ? ' is-danger' : ''}`,
       role: 'menuitem',
-      disabled: Boolean(it.disabled),
+      disabled: busy || Boolean(it.disabled),
       onclick: () => {
         close();
         it.onClick();
@@ -331,6 +332,11 @@ function menuButton({ label = 'More', icon: iconName = null, items, small = true
       next.focus();
     }
   }
+  // A click on <summary> is what the browser toggles <details> open/closed for by
+  // default; preventDefault on it (while busy) stops the menu from opening at all.
+  summary.addEventListener('click', (e) => {
+    if (busy) e.preventDefault();
+  });
   det.addEventListener('toggle', () => {
     if (det.open) {
       renderItems();
@@ -345,7 +351,16 @@ function menuButton({ label = 'More', icon: iconName = null, items, small = true
   });
   renderItems();
 
-  return { el: det, close, refresh: renderItems };
+  /** While busy, the trigger can't be opened and every item is disabled - so a click
+   * that's already in flight (e.g. from an item's own onClick) can't be repeated before
+   * it finishes, the way a disabled <button> would guard a normal button click. */
+  function setBusy(v) {
+    busy = Boolean(v);
+    summary.setAttribute('aria-disabled', String(busy));
+    if (busy) close();
+  }
+
+  return { el: det, close, refresh: renderItems, setBusy };
 }
 
 // ================================================================ formatting
@@ -465,6 +480,13 @@ function parseTagList(text) {
   return text.split(',').map((t) => t.trim()).filter(Boolean);
 }
 
+// state.library reads this at module init time (below), so it must be declared before
+// `state` - a const declared after this point would still be in its temporal dead zone
+// at that point, and loadLibraryFilters()'s try/catch would silently swallow that
+// ReferenceError and fall back to defaults on every load, never actually restoring
+// anything from sessionStorage.
+const LIB_FILTERS_KEY = 'dsa-review:library-filters';
+
 // ================================================================ app state
 const state = {
   summaries: { main: null, neetcode: null }, // GET /api/summary?deck=..., cached per deck
@@ -472,7 +494,8 @@ const state = {
   tags: [],
   sessions: { main: null, neetcode: null }, // per deck: { key, tag, order: [id], done }
   todayTags: { main: '', neetcode: '' },    // per-deck "Focus on" tag filter
-  library: { q: '', tag: '', status: '', deck: '', sortKey: 'next', sortDir: 1 },
+  // Restored from sessionStorage (see loadLibraryFilters below), same as NeetCode's filters.
+  library: Object.assign({ q: '', tag: '', status: '', deck: '', sortKey: 'next', sortDir: 1 }, loadLibraryFilters()),
   neetcodeFilters: null,
   cleanups: [],
   seq: 0,
@@ -759,6 +782,9 @@ function claudeAssist({ problem, getCode, getLastRun, alwaysDefaultHint = false 
   let statusInfo = null;
   let busy = false;
   let abortCtrl = null;
+  // Bumped by "New conversation" so a response for a conversation that was reset while
+  // it was in flight gets ignored instead of appearing to answer the new one.
+  let convoGen = 0;
 
   const panelId = `claude-assist-${problem.id}-${Math.random().toString(36).slice(2, 8)}`;
   const threadEl = h('div', { class: 'claude-thread', role: 'log', 'aria-label': 'Conversation with Claude' });
@@ -792,6 +818,8 @@ function claudeAssist({ problem, getCode, getLastRun, alwaysDefaultHint = false 
   }, 'Cancel');
   const newConvoBtn = h('button', {
     type: 'button', class: 'btn btn-sm btn-ghost', onclick: () => {
+      convoGen++; // any in-flight ask() for the old conversation gets ignored when it resolves
+      if (abortCtrl) abortCtrl.abort();
       history = [];
       threadEl.replaceChildren();
     },
@@ -863,9 +891,15 @@ function claudeAssist({ problem, getCode, getLastRun, alwaysDefaultHint = false 
     const question = questionInput.value.trim();
     const modeLabel = CLAUDE_ASSIST_MODES.find((m) => m.key === mode).label;
     addMessage('user', document.createTextNode(question ? `${modeLabel}: ${question}` : `${modeLabel} on the code above`));
+    // The question is already captured above (in `question`, for the request) and in the
+    // thread (as the message just added) - clear the box so it's not left sitting there
+    // looking unsent. Restored below if the request doesn't actually go through.
+    const questionBeforeClear = questionInput.value;
+    questionInput.value = '';
     const code = getCode();
     const lastRun = getLastRun();
     const isFirst = history.length === 0;
+    const gen = convoGen; // if "New conversation" runs before this resolves, ignore the result
     busy = true;
     askBtn.disabled = true;
     cancelBtn.hidden = false;
@@ -881,14 +915,16 @@ function claudeAssist({ problem, getCode, getLastRun, alwaysDefaultHint = false 
         history,
       };
       const res = await api('POST', '/api/claude/help', body, { signal: abortCtrl.signal });
+      if (gen !== convoGen) return; // stale: the conversation was reset while this was in flight
       history = [...history,
         { role: 'user', content: claudeHistoryEntry(problem, code, lastRun, question, isFirst) },
         { role: 'assistant', content: clip(res.text, 19500) }];
       addMessage('assistant', renderMarkdown(res.text));
     } catch (err) {
+      if (gen === convoGen) questionInput.value = questionBeforeClear; // nothing was sent; give it back
       if (err && err.name === 'AbortError') {
         threadEl.lastElementChild?.remove(); // drop the user turn we just added; nothing was answered
-      } else {
+      } else if (gen === convoGen) {
         addMessage('assistant', h('p', { class: 'claude-error', text: err.message || String(err) }));
       }
     } finally {
@@ -1322,7 +1358,11 @@ function createReviewCard(p, { mode, onRated, onSkip, onClose }) {
   const CODE_PANEL_KEY = 'dsa-review:code-it-here-open';
   let codeAttempt = null;
   const codePanelId = `code-${p.id}-${Math.random().toString(36).slice(2, 8)}`;
-  const codePanel = h('div', { class: 'rc-code-panel', id: codePanelId, hidden: true });
+  const codeHint = h('p', {
+    class: 'hint rc-code-hint',
+    text: 'Typing here saves it as your latest attempt for this problem (replacing the previous one).',
+  });
+  const codePanel = h('div', { class: 'rc-code-panel', id: codePanelId, hidden: true }, codeHint);
   const codeBtn = h('button', {
     type: 'button', class: 'btn rc-code-toggle', 'aria-expanded': 'false', 'aria-controls': codePanelId,
     onclick: () => toggleCode(),
@@ -1388,6 +1428,7 @@ function createReviewCard(p, { mode, onRated, onSkip, onClose }) {
     el.classList.add('is-busy');
     el.setAttribute('aria-busy', 'true');
     rateButtons.forEach((b) => { b.disabled = true; });
+    if (skipBtn) skipBtn.disabled = true;
     const duration = timer.used ? Math.round(elapsed()) : null;
     try {
       const updated = await api('POST', `/api/problems/${p.id}/review`, { rating: value, duration_ms: duration });
@@ -1400,17 +1441,26 @@ function createReviewCard(p, { mode, onRated, onSkip, onClose }) {
         el.classList.remove('is-busy');
         el.removeAttribute('aria-busy');
         rateButtons.forEach((b) => { b.disabled = false; });
+        if (skipBtn) skipBtn.disabled = false;
       }
     }
   }
 
   // ---------- footer
+  // Shared by the button and the "S" keyboard shortcut, so both go through the same
+  // busy/destroyed guard a rating is already subject to (see `rate` above).
+  function doSkip() {
+    if (!busy && !destroyed) onSkip();
+  }
+  const skipBtn = mode === 'session'
+    ? h('button', { type: 'button', class: 'btn btn-sm', 'aria-keyshortcuts': 'S', onclick: () => doSkip() }, 'Skip for now')
+    : null;
   const hint = (keys, label) => h('span', null, keys, ' ', label);
   const foot = h('div', { class: 'rc-foot' },
     h('div', { class: 'btn-group' },
       mode === 'session'
         ? [
-          h('button', { type: 'button', class: 'btn btn-sm', 'aria-keyshortcuts': 'S', onclick: () => onSkip() }, 'Skip for now'),
+          skipBtn,
           h('a', { class: 'btn btn-sm btn-ghost', href: `#/problem/${p.id}` }, 'Open details'),
         ]
         : h('button', { type: 'button', class: 'btn btn-sm', onclick: () => onClose() }, 'Cancel review')),
@@ -1433,7 +1483,7 @@ function createReviewCard(p, { mode, onRated, onSkip, onClose }) {
     rate,
     toggleTimer,
     toggleNotes,
-    skip: mode === 'session' ? () => { if (!busy && !destroyed) onSkip(); } : null,
+    skip: mode === 'session' ? doSkip : null,
     focusTitle: () => title.focus({ preventScroll: true }),
     destroy() {
       destroyed = true;
@@ -1457,10 +1507,10 @@ document.addEventListener('keydown', (e) => {
     if (!e.repeat) card.toggleTimer();
   } else if (key === 'n' || key === 'N') {
     e.preventDefault();
-    card.toggleNotes();
+    if (!e.repeat) card.toggleNotes();
   } else if ((key === 's' || key === 'S') && card.skip) {
     e.preventDefault();
-    card.skip();
+    if (!e.repeat) card.skip();
   }
 });
 // A focused button would otherwise also "click" on Space keyup after we handled it on keydown.
@@ -1470,30 +1520,32 @@ document.addEventListener('keyup', (e) => {
   e.preventDefault();
 });
 
-function showReviewToast(updated, context) {
+function showReviewToast(updated, context, deck) {
   // The review's id goes along with Undo, so a pop-up whose review was already undone
   // (e.g. from the problem page) can't remove an older review by mistake.
   const reviewId = updated.history && updated.history.length ? updated.history[0].id : undefined;
   toast(`“${updated.title}”: next review ${nextReviewPhrase(updated.due)}`, {
     type: 'success',
     actionLabel: 'Undo',
-    onAction: () => undoReview(updated.id, context, reviewId),
+    onAction: () => undoReview(updated.id, context, reviewId, deck),
   });
 }
 
-async function undoReview(pid, context, reviewId) {
+/** `deck` is the deck the review actually happened in, captured when the toast was
+ * shown - never read from whatever session happens to be on screen when Undo is
+ * clicked, since the user may have navigated to a different deck's session (or away
+ * from Today entirely) in the meantime. */
+async function undoReview(pid, context, reviewId, deck) {
   try {
     const p = await api('POST', `/api/problems/${pid}/undo`, reviewId === undefined ? {} : { review_id: reviewId });
     toast(`Review undone for “${p.title}”`);
-    // The session that's on screen may be either deck's (with the "show NeetCode on
-    // main Today" setting on, a NeetCode problem can be in the main session).
-    const s = state.today ? state.sessions[state.today.deck] : null;
+    const s = deck ? state.sessions[deck] : null;
     if (context === 'session' && s) {
       s.order = [pid, ...s.order.filter((x) => x !== pid)];
       s.done = Math.max(0, s.done - 1);
     }
     await refreshSummaries();
-    if (state.today) {
+    if (state.today && state.today.deck === deck) {
       await syncQueue(state.today);
       renderToday(state.today, { focusCard: true });
     } else if (state.detail && state.detail.id === pid) {
@@ -1602,10 +1654,12 @@ function renderToday(ctrl, { focusCard = false } = {}) {
 
 function renderStats(el, summary, queue) {
   el.classList.toggle('is-loading', !summary);
+  // `sub` is usually a string, but can be an array of strings/nodes (see the "New
+  // available" tile below, which adds a link) - h()'s children handle both the same way.
   const tile = (label, value, unit, sub, primary) => h('div', { class: `stat${primary ? ' is-primary' : ''}` },
     h('div', { class: 'stat-label', text: label }),
     h('div', { class: 'stat-value' }, String(value), unit ? h('span', { class: 'unit', text: unit }) : null),
-    h('div', { class: 'stat-sub', text: sub || ' ' }));
+    h('div', { class: 'stat-sub' }, sub || ' '));
   if (!summary || !queue) {
     el.replaceChildren(...['Due today', 'New available', 'Reviewed today', 'Streak', '30-day recall']
       .map((l) => tile(l, '–', '', '')));
@@ -1614,7 +1668,9 @@ function renderStats(el, summary, queue) {
   const c = summary.counts;
   const newAvail = Math.min(queue.new_left_today, c.new);
   let newSub = c.new ? `${c.new} waiting` : 'None waiting';
-  if (c.new && queue.new_left_today === 0) newSub = `Limit reached · ${c.new} waiting`;
+  if (c.new && queue.new_left_today === 0) {
+    newSub = [`Limit reached · ${c.new} waiting · `, h('a', { href: '#/settings' }, 'Raise the limit in Settings')];
+  }
   const rate = summary.recall_rate_30d;
   el.replaceChildren(
     tile('Due today', c.due, '', c.total ? `of ${plural(c.total, 'problem')}` : 'No problems yet', true),
@@ -1728,7 +1784,7 @@ async function showCurrent(ctrl, holder, focusCard, { replacing = null } = {}) {
     onRated: async (updated) => {
       s.order = s.order.filter((x) => x !== updated.id);
       s.done += 1;
-      showReviewToast(updated, 'session');
+      showReviewToast(updated, 'session', ctrl.deck);
       try {
         await syncQueue(ctrl, { withSummary: true });
       } catch (err) {
@@ -1748,6 +1804,10 @@ async function showCurrent(ctrl, holder, focusCard, { replacing = null } = {}) {
       // doesn't scroll. (The progress bar doesn't change on a skip.)
       const current = ctrl.card;
       state.activeReview = null;
+      // If focus is still inside the card (e.g. the Skip button itself), blur it first -
+      // otherwise the browser can do its own focus-repair scroll once the element below
+      // becomes inert, undoing the "stay in place" swap this is all about.
+      if (current.el.contains(document.activeElement)) document.activeElement.blur();
       current.el.classList.add('is-busy');
       current.el.inert = true;
       current.el.setAttribute('aria-busy', 'true');
@@ -2131,16 +2191,37 @@ function problemForm({ initial = {}, tags = [], withRating = false, submitText =
       }),
       h('div', null, field('language', 'Language', language), langList)));
 
-  // ---------- autofill from a pasted LeetCode link (never overwrites a field already typed in)
+  // ---------- autofill from a pasted LeetCode link (never overwrites a field the user
+  // has typed into themselves - only a field that's still empty, or still holds exactly
+  // what a *previous* autofill wrote there).
   const urlAutofillNote = h('p', { class: 'hint', hidden: true });
+  // What autofill itself last wrote into each field, so a later autofill (for a different
+  // URL) - or a revert, below - only ever touches a field the user hasn't since edited.
+  const lastAutofill = { title: null, difficulty: null, tags: null, deck: null };
+  const stillAutofilled = (current, remembered, emptyValue) => current === emptyValue || current === remembered;
+
+  /** Called when the URL no longer points at a matched NeetCode 150 problem: undo
+   * whatever a previous match autofilled into deck/tags/difficulty (title is left
+   * alone - it's still a reasonable guess even without a NeetCode match), but only
+   * fields the user hasn't edited since. */
+  function revertNcAutofill() {
+    if (stillAutofilled(difficulty.value, lastAutofill.difficulty, '')) difficulty.value = '';
+    if (stillAutofilled(tagsInput.value.trim(), lastAutofill.tags, '')) {
+      tagsInput.value = '';
+      syncChips();
+    }
+    if (stillAutofilled(deck.value, lastAutofill.deck, 'main')) deck.value = 'main';
+    lastAutofill.difficulty = lastAutofill.tags = lastAutofill.deck = null;
+    urlAutofillNote.hidden = true;
+  }
+
   const onUrlInput = debounce(async () => {
     const m = /leetcode\.com\/problems\/([a-z0-9-]+)/i.exec(url.value);
     if (!m) {
-      urlAutofillNote.hidden = true;
+      revertNcAutofill();
       return;
     }
     const slug = m[1].toLowerCase();
-    if (!title.value.trim()) title.value = titleCaseSlug(slug);
     let matched = null;
     try {
       const problems = await fetchNeetcodeProblems();
@@ -2148,19 +2229,33 @@ function problemForm({ initial = {}, tags = [], withRating = false, submitText =
     } catch {
       matched = null;
     }
+    // Resolve the real NeetCode title first - Title-Casing the slug gets plenty of
+    // titles wrong ("lru-cache" -> "Lru Cache" instead of "LRU Cache"), so that's only
+    // a fallback for when there's no match at all.
+    const guessedTitle = matched ? matched.title : titleCaseSlug(slug);
+    if (stillAutofilled(title.value.trim(), lastAutofill.title, '')) {
+      title.value = guessedTitle;
+      lastAutofill.title = guessedTitle;
+    }
     if (!matched) {
-      urlAutofillNote.hidden = true;
+      revertNcAutofill();
       return;
     }
-    if (!title.value.trim()) title.value = matched.title;
-    if (!difficulty.value) difficulty.value = matched.difficulty;
-    if (!tagsInput.value.trim()) {
+    if (stillAutofilled(difficulty.value, lastAutofill.difficulty, '')) {
+      difficulty.value = matched.difficulty;
+      lastAutofill.difficulty = matched.difficulty;
+    }
+    if (stillAutofilled(tagsInput.value.trim(), lastAutofill.tags, '')) {
       const tagList = [slugTag(matched.category), 'neetcode-150'];
       if (matched.blind75) tagList.push('blind-75');
       tagsInput.value = tagList.join(', ');
+      lastAutofill.tags = tagsInput.value;
       syncChips();
     }
-    if (deck.value === 'main') deck.value = 'neetcode';
+    if (stillAutofilled(deck.value, lastAutofill.deck, 'main')) {
+      deck.value = 'neetcode';
+      lastAutofill.deck = 'neetcode';
+    }
     moreDetails.open = true;
     urlAutofillNote.hidden = false;
     urlAutofillNote.textContent = `Recognized NeetCode 150 #${matched.id} — added to your NeetCode deck. Change under More details.`;
@@ -2292,10 +2387,16 @@ function problemForm({ initial = {}, tags = [], withRating = false, submitText =
     clearErrors();
     for (const input of [title, url, source, tagsInput, prompt, insight, notes, solution]) input.value = '';
     difficulty.value = '';
-    deck.value = 'main';
+    // Deck is deliberately NOT reset here (unlike every other field) - "Save & add
+    // another" keeps whatever deck was selected, so adding several NeetCode problems
+    // in a row doesn't mean re-picking the deck each time.
     language.value = 'python';
     moreDetails.open = false;
     urlAutofillNote.hidden = true;
+    // The fields just cleared above are all empty now, so the next autofill will fill
+    // them regardless of what's remembered - only title/difficulty/tags need resetting
+    // here for clarity; `deck` is left as-is, in step with the kept deck.value.
+    lastAutofill.title = lastAutofill.difficulty = lastAutofill.tags = null;
     if (withRating) {
       ratingGroup.querySelector(`input[name="${ratingName}"][value=""]`).checked = true;
       duration.value = '';
@@ -2529,9 +2630,12 @@ async function viewNeetcode(main, { seq }) {
     }
     const moveBtn = h('button', { type: 'button', class: 'btn btn-primary btn-sm' }, 'Move to NeetCode');
     moveBtn.addEventListener('click', async () => {
+      const titles = tracker.adoptable.map((a) => a.title);
+      const shown = titles.slice(0, 8);
+      const preview = titles.length > shown.length ? `${shown.join(', ')}, and ${titles.length - shown.length} more` : shown.join(', ');
       const ok = await confirmDialog({
         title: 'Move problems to the NeetCode deck?',
-        body: `${plural(tracker.adoptable.length, 'problem')} from your main library will move to the NeetCode deck (tagged neetcode-150) and join its own review schedule. Nothing about their schedule or history changes.`,
+        body: `${plural(tracker.adoptable.length, 'problem')} from your main library will move to the NeetCode deck (tagged neetcode-150) and join its own review schedule. Their schedule and history stay the same. Moving: ${preview}.`,
         confirmLabel: 'Move to NeetCode',
       });
       if (!ok) return;
@@ -2541,7 +2645,10 @@ async function viewNeetcode(main, { seq }) {
         toast(`Moved ${plural(r.moved, 'problem')} to the NeetCode deck`, { type: 'success' });
         refreshSummaries();
         if (!isCurrent(seq)) return;
-        router(); // re-render this page: progress, next up and the review card all changed
+        // Refresh this page's own data in place (progress, next up, the review card and
+        // the category list all changed) instead of router(), which would re-render the
+        // whole page from scratch and jump back to the top.
+        await refreshPage();
       } catch (err) {
         toastError(err);
         if (moveBtn.isConnected) moveBtn.disabled = false;
@@ -2599,15 +2706,18 @@ async function viewNeetcode(main, { seq }) {
     renderPick(pick, 'Random pick', `Picked from ${pool.length} ${kind}${pool.length === 1 ? 'problem' : 'problems'}${filtersOn ? ' matching your filters' : ''}`);
     learnHost.querySelector('.nc-pick-title').focus();
   }
-  const nextUp = tracker.problems.find((p) => p.status === 'not_started');
-  if (nextUp) {
-    renderPick(nextUp, 'Next up', null);
-  } else {
-    learnHost.replaceChildren(
-      h('h2', { text: 'Learn something new' }),
-      h('p', { class: 'muted small', text: 'You’ve added every problem in the NeetCode 150. Nice work.' }),
-      h('div', { class: 'btn-group' }, randomBtn()));
+  function renderLearnPanel() {
+    const nextUp = tracker.problems.find((p) => p.status === 'not_started');
+    if (nextUp) {
+      renderPick(nextUp, 'Next up', null);
+    } else {
+      learnHost.replaceChildren(
+        h('h2', { text: 'Learn something new' }),
+        h('p', { class: 'muted small', text: 'You’ve added every problem in the NeetCode 150. Nice work.' }),
+        h('div', { class: 'btn-group' }, randomBtn()));
+    }
   }
+  renderLearnPanel();
 
   const reviewHost = h('div', { class: 'nc-top-half nc-review-half' }, loadingEl('Loading your review status'));
   async function renderReviewHalf() {
@@ -2643,28 +2753,33 @@ async function viewNeetcode(main, { seq }) {
   renderAdoptBanner();
 
   // ---------- summary
-  const t = tracker.totals;
-  const overallPct = t.total ? t.solved / t.total : 0;
-  summaryEl.replaceChildren(
-    h('div', { class: 'card-head' },
-      h('h2', { id: 'nc-summary-title', text: 'Your progress' }),
-      h('span', { class: 'muted small', text: `${plural(t.mastered, 'problem')} mastered` })),
-    h('div', { class: 'nc-overall' },
-      h('span', { class: 'nc-overall-num', text: `${t.solved} / ${t.total}` }),
-      miniBar(overallPct),
-      h('span', { class: 'muted', text: `${Math.round(overallPct * 100)}%` })),
-    h('div', { class: 'nc-stats-grid' },
-      ['Easy', 'Medium', 'Hard'].map((d) => {
-        const dd = t.by_difficulty[d];
-        return h('div', { class: 'nc-stat' },
-          h('div', { class: 'stat-label', text: d }),
-          h('div', { class: 'stat-value', text: `${dd.solved} / ${dd.total}` }),
-          miniBar(dd.total ? dd.solved / dd.total : 0));
-      }),
-      h('div', { class: 'nc-stat' },
-        h('div', { class: 'stat-label', text: 'Blind 75' }),
-        h('div', { class: 'stat-value', text: `${t.blind75.solved} / ${t.blind75.total}` }),
-        miniBar(t.blind75.total ? t.blind75.solved / t.blind75.total : 0))));
+  function renderSummaryCard() {
+    const t = tracker.totals;
+    const overallPct = t.total ? t.solved / t.total : 0;
+    summaryEl.replaceChildren(
+      h('div', { class: 'card-head' },
+        // tabindex so refreshPage() (below) can send focus here after an in-place
+        // refresh, e.g. once "Move to NeetCode" removes the button that had focus.
+        h('h2', { id: 'nc-summary-title', tabindex: '-1', text: 'Your progress' }),
+        h('span', { class: 'muted small', text: `${plural(t.mastered, 'problem')} mastered` })),
+      h('div', { class: 'nc-overall' },
+        h('span', { class: 'nc-overall-num', text: `${t.solved} / ${t.total}` }),
+        miniBar(overallPct),
+        h('span', { class: 'muted', text: `${Math.round(overallPct * 100)}%` })),
+      h('div', { class: 'nc-stats-grid' },
+        ['Easy', 'Medium', 'Hard'].map((d) => {
+          const dd = t.by_difficulty[d];
+          return h('div', { class: 'nc-stat' },
+            h('div', { class: 'stat-label', text: d }),
+            h('div', { class: 'stat-value', text: `${dd.solved} / ${dd.total}` }),
+            miniBar(dd.total ? dd.solved / dd.total : 0));
+        }),
+        h('div', { class: 'nc-stat' },
+          h('div', { class: 'stat-label', text: 'Blind 75' }),
+          h('div', { class: 'stat-value', text: `${t.blind75.solved} / ${t.blind75.total}` }),
+          miniBar(t.blind75.total ? t.blind75.solved / t.blind75.total : 0))));
+  }
+  renderSummaryCard();
 
   // ---------- filters
   const search = h('input', { type: 'search', id: 'nc-q', value: f.q, autocomplete: 'off', placeholder: 'Search titles' });
@@ -2744,11 +2859,58 @@ async function viewNeetcode(main, { seq }) {
   statusSel.addEventListener('change', () => { f.status = statusSel.value; saveNcFilters(f); renderList(); });
   blindChk.addEventListener('change', () => { f.blind75 = blindChk.checked; saveNcFilters(f); renderList(); });
 
+  /** Re-fetches the tracker and repaints everything that depends on it (top card,
+   * adopt banner, progress card, category list) in place - used after "Move to
+   * NeetCode" so the page doesn't jump back to the top the way a full router()
+   * re-render would. Scroll position is left alone; focus moves to the progress
+   * card's heading, since the button that had focus (in the adopt banner) may no
+   * longer exist once the banner is gone or rebuilt. */
+  async function refreshPage() {
+    let newTracker;
+    try {
+      newTracker = await api('GET', '/api/neetcode');
+    } catch (err) {
+      toastError(err);
+      return;
+    }
+    if (!isCurrent(seq)) return;
+    tracker = newTracker;
+    renderLearnPanel();
+    await renderReviewHalf();
+    if (!isCurrent(seq)) return;
+    renderAdoptBanner();
+    renderSummaryCard();
+    renderList();
+    const heading = document.getElementById('nc-summary-title');
+    if (heading) heading.focus({ preventScroll: true });
+  }
+
   catsHost.removeAttribute('aria-busy');
   renderList();
 }
 
 // ================================================================ Library view
+/** Loads state.library's saved filters (q, tag, status, deck, sortKey, sortDir), same
+ * pattern as NeetCode's getNcFilters/saveNcFilters below. A function declaration (not
+ * const) so it's hoisted and usable from the `state` object literal above, which reads
+ * it once at module load. */
+function loadLibraryFilters() {
+  try {
+    const raw = sessionStorage.getItem(LIB_FILTERS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    /* ignore: sessionStorage unavailable (private browsing, etc.) */
+  }
+  return {};
+}
+function saveLibraryFilters(L) {
+  try {
+    sessionStorage.setItem(LIB_FILTERS_KEY, JSON.stringify(L));
+  } catch {
+    /* ignore: sessionStorage unavailable (private browsing, etc.) */
+  }
+}
+
 const LIB_COLUMNS = [
   { key: 'title', label: 'Title' },
   { key: 'difficulty', label: 'Difficulty' },
@@ -2819,28 +2981,42 @@ async function viewLibrary(main, { seq }) {
 
   // Deck segmented control (Main / NeetCode / Both), counts from the deck summaries.
   const deckSeg = h('div', { class: 'segmented', role: 'radiogroup', 'aria-label': 'Deck' });
-  function paintDeckSeg() {
+  function deckSegOptions() {
     const dc = state.latestSummary ? state.latestSummary.deck_counts : null;
-    const options = [
+    return [
       { value: '', label: 'Main', count: dc ? dc.main.total : null },
       { value: 'neetcode', label: 'NeetCode', count: dc ? dc.neetcode.total : null },
       { value: 'all', label: 'Both', count: dc ? dc.main.total + dc.neetcode.total : null },
     ];
-    deckSeg.replaceChildren(...options.map((o) => {
-      const id = `lib-deck-${o.value || 'main'}`;
-      const input = h('input', {
-        type: 'radio', name: 'lib-deck', id, value: o.value, checked: L.deck === o.value,
-        onchange: () => {
-          L.deck = o.value;
-          L.tag = '';
-          tagSel.value = '';
-          load();
-          loadTagsForDeck();
-        },
-      });
-      return h('label', { class: 'seg-option', for: id },
-        input, o.label, o.count !== null ? h('span', { class: 'seg-count', text: ` (${o.count})` }) : null);
-    }));
+  }
+  // Built once (below); later calls only update the checked state and count text of
+  // the existing radios in place - rebuilding them on every repaint (e.g. once the
+  // deck counts load) would steal focus off a radio the user has tabbed to.
+  function paintDeckSeg() {
+    const options = deckSegOptions();
+    if (!deckSeg.children.length) {
+      deckSeg.replaceChildren(...options.map((o) => {
+        const id = `lib-deck-${o.value || 'main'}`;
+        const input = h('input', {
+          type: 'radio', name: 'lib-deck', id, value: o.value, checked: L.deck === o.value,
+          onchange: () => {
+            L.deck = o.value;
+            L.tag = '';
+            tagSel.value = '';
+            saveLibraryFilters(L);
+            load();
+            loadTagsForDeck();
+          },
+        });
+        return h('label', { class: 'seg-option', for: id }, input, o.label, h('span', { class: 'seg-count' }));
+      }));
+      return;
+    }
+    options.forEach((o, i) => {
+      const label = deckSeg.children[i];
+      label.querySelector('input').checked = L.deck === o.value;
+      label.querySelector('.seg-count').textContent = o.count !== null ? ` (${o.count})` : '';
+    });
   }
   paintDeckSeg();
 
@@ -2882,6 +3058,7 @@ async function viewLibrary(main, { seq }) {
       L.sortKey = key;
       L.sortDir = key === 'reps' || key === 'lapses' ? -1 : 1;
     }
+    saveLibraryFilters(L);
     render();
   }
 
@@ -2983,6 +3160,7 @@ async function viewLibrary(main, { seq }) {
     search.value = '';
     tagSel.value = '';
     statusSel.value = '';
+    saveLibraryFilters(L);
     load();
     search.focus();
   }
@@ -2990,16 +3168,18 @@ async function viewLibrary(main, { seq }) {
 
   const onSearch = debounce(() => {
     L.q = search.value.trim();
+    saveLibraryFilters(L);
     load();
   }, 250);
   onCleanup(onSearch.cancel);
   search.addEventListener('input', onSearch);
-  tagSel.addEventListener('change', () => { L.tag = tagSel.value; load(); });
-  statusSel.addEventListener('change', () => { L.status = statusSel.value; load(); });
+  tagSel.addEventListener('change', () => { L.tag = tagSel.value; saveLibraryFilters(L); load(); });
+  statusSel.addEventListener('change', () => { L.status = statusSel.value; saveLibraryFilters(L); load(); });
   sortSel.addEventListener('change', () => {
     const [key, dir] = sortSel.value.split(':');
     L.sortKey = key;
     L.sortDir = Number(dir);
+    saveLibraryFilters(L);
     render();
   });
 
@@ -3013,7 +3193,10 @@ async function viewLibrary(main, { seq }) {
     if (!isCurrent(seq)) return;
     tagSel.replaceChildren(h('option', { value: '' }, 'All tags'),
       ...tags.map((t) => h('option', { value: t.tag }, `${t.tag} (${t.count})`)));
-    if (L.tag && !tags.some((t) => t.tag === L.tag)) L.tag = '';
+    if (L.tag && !tags.some((t) => t.tag === L.tag)) {
+      L.tag = '';
+      saveLibraryFilters(L);
+    }
     tagSel.value = L.tag;
   }
 
@@ -3073,20 +3256,21 @@ function renderDetail(ctrl, { focus } = {}) {
   document.title = `${p.title} · DSA Review`;
 
   let focusTarget;
+  let actions = null; // the view-mode actions row (Review now / Edit / More) - see below
   if (ctrl.mode === 'review') {
     const heading = h('h1', { tabindex: '-1', text: 'Review now' });
     const card = createReviewCard(p, {
       mode: 'single',
       onRated: async (updated) => {
-        showReviewToast(updated, 'single');
+        showReviewToast(updated, 'single', updated.deck);
         ctrl.p = updated;
         ctrl.mode = 'view';
         refreshSummaries();
-        renderDetail(ctrl, { focus: true });
+        renderDetail(ctrl, { focus: 'view' });
       },
       onClose: () => {
         ctrl.mode = 'view';
-        renderDetail(ctrl, { focus: true });
+        renderDetail(ctrl, { focus: 'view' });
       },
     });
     let note = 'Recode it from scratch, then rate how it went.';
@@ -3126,14 +3310,37 @@ function renderDetail(ctrl, { focus } = {}) {
     });
   } else {
     const heading = h('h1', { tabindex: '-1' }, titleLink(p, 20));
+    actions = detailActions(ctrl);
     main.replaceChildren(
       backLink(),
       detailHeader(ctrl, heading),
       memoryStatsRow(p),
-      detailActions(ctrl),
+      actions,
       detailBody(p, ctrl),
     );
     focusTarget = heading;
+  }
+
+  if (ctrl.mode === 'review' && focus === 'review') {
+    // Entering review mode: scroll just enough for the review card to be visible,
+    // instead of jumping to the very top of the page.
+    revealTop(ctrl.card.el);
+    focusTarget.focus({ preventScroll: true });
+    return;
+  }
+  if (actions && focus === 'view') {
+    // Back from reviewing or cancelling a review: a minimal scroll (only if the actions
+    // row ended up above the viewport) instead of jumping to the top of the page.
+    revealTop(actions);
+    actions.querySelector('.btn-primary').focus({ preventScroll: true });
+    return;
+  }
+  if (actions && focus === 'more') {
+    // After Suspend/Unsuspend or More -> Undo last review: keep the scroll position and
+    // send focus back to the (freshly re-rendered) More trigger that opened it.
+    const trigger = actions.querySelector('.menu-trigger');
+    if (trigger) trigger.focus({ preventScroll: true });
+    return;
   }
   if (focus || hadHeadingFocus) {
     window.scrollTo(0, 0);
@@ -3176,20 +3383,10 @@ function memoryStatsRow(p) {
 
 /** Review now / Edit / More (Suspend, Undo, Delete) - the primary actions for a problem. */
 function detailActions(ctrl) {
-  const p = ctrl.p;
-  const busyWrap = async (btn, fn) => {
-    btn.disabled = true;
-    try {
-      await fn();
-    } catch (err) {
-      toastError(err);
-      if (btn.isConnected) btn.disabled = false;
-    }
-  };
   const reviewBtn = h('button', { type: 'button', class: 'btn btn-primary' }, 'Review now');
   reviewBtn.addEventListener('click', () => {
     ctrl.mode = 'review';
-    renderDetail(ctrl, { focus: true });
+    renderDetail(ctrl, { focus: 'review' });
   });
   const editBtn = h('button', { type: 'button', class: 'btn' }, 'Edit');
   editBtn.addEventListener('click', () => {
@@ -3197,55 +3394,73 @@ function detailActions(ctrl) {
     renderDetail(ctrl, { focus: true });
   });
 
-  const noopBtn = h('button', { hidden: true });
+  // Disables the More trigger itself (so it can't be reopened) and every item in it
+  // while an action is in flight - unlike a plain disabled button on one item, this
+  // also blocks a second click from a freshly reopened menu.
+  const busyWrap = async (fn) => {
+    more.setBusy(true);
+    try {
+      await fn();
+    } catch (err) {
+      toastError(err);
+    } finally {
+      more.setBusy(false);
+    }
+  };
   const more = menuButton({
     label: 'More',
     small: false, // sits next to full-size Review now / Edit buttons
-    items: [
-      {
-        label: p.suspended ? 'Unsuspend' : 'Suspend',
-        onClick: () => busyWrap(noopBtn, async () => {
-          const updated = await api('PATCH', `/api/problems/${p.id}`, { suspended: !p.suspended });
-          toast(updated.suspended ? 'Suspended. It won’t show up in Today until you unsuspend it.' : 'Unsuspended. It’s back on your schedule.', { type: 'success' });
-          ctrl.p = updated;
-          refreshSummaries();
-          renderDetail(ctrl);
-        }),
-      },
-      {
-        label: 'Undo last review',
-        disabled: !p.history.length,
-        onClick: () => busyWrap(noopBtn, async () => {
-          const updated = await api('POST', `/api/problems/${p.id}/undo`, {});
-          toast('Last review undone. The schedule is back to how it was.', { type: 'success' });
-          ctrl.p = updated;
-          refreshSummaries();
-          renderDetail(ctrl, { focus: true });
-        }),
-      },
-      {
-        label: 'Delete',
-        danger: true,
-        onClick: async () => {
-          const n = p.history.length;
-          const ok = await confirmDialog({
-            title: 'Delete this problem?',
-            body: `“${p.title}”${n ? ` and its ${plural(n, 'review')}` : ''} will be permanently deleted. This can’t be undone.`,
-            confirmLabel: 'Delete problem',
-          });
-          if (!ok) return;
-          await busyWrap(noopBtn, async () => {
-            await api('DELETE', `/api/problems/${p.id}`, {});
-            for (const s of Object.values(state.sessions)) {
-              if (s) s.order = s.order.filter((x) => x !== p.id);
-            }
-            toast(`Deleted “${p.title}”`, { type: 'success' });
+    // A function (not a static array) so it always reads ctrl.p fresh when the menu
+    // opens - e.g. "Undo last review" reflects the current history length even after
+    // an action above has replaced ctrl.p without rebuilding this menu.
+    items: () => {
+      const p = ctrl.p;
+      return [
+        {
+          label: p.suspended ? 'Unsuspend' : 'Suspend',
+          onClick: () => busyWrap(async () => {
+            const updated = await api('PATCH', `/api/problems/${p.id}`, { suspended: !p.suspended });
+            toast(updated.suspended ? 'Suspended. It won’t show up in Today until you unsuspend it.' : 'Unsuspended. It’s back on your schedule.', { type: 'success' });
+            ctrl.p = updated;
             refreshSummaries();
-            location.hash = '#/library';
-          });
+            renderDetail(ctrl, { focus: 'more' });
+          }),
         },
-      },
-    ],
+        {
+          label: 'Undo last review',
+          disabled: !p.history.length,
+          onClick: () => busyWrap(async () => {
+            const updated = await api('POST', `/api/problems/${p.id}/undo`, {});
+            toast('Last review undone. The schedule is back to how it was.', { type: 'success' });
+            ctrl.p = updated;
+            refreshSummaries();
+            renderDetail(ctrl, { focus: 'more' });
+          }),
+        },
+        {
+          label: 'Delete',
+          danger: true,
+          onClick: async () => {
+            const n = p.history.length;
+            const ok = await confirmDialog({
+              title: 'Delete this problem?',
+              body: `“${p.title}”${n ? ` and its ${plural(n, 'review')}` : ''} will be permanently deleted. This can’t be undone.`,
+              confirmLabel: 'Delete problem',
+            });
+            if (!ok) return;
+            await busyWrap(async () => {
+              await api('DELETE', `/api/problems/${p.id}`, {});
+              for (const s of Object.values(state.sessions)) {
+                if (s) s.order = s.order.filter((x) => x !== p.id);
+              }
+              toast(`Deleted “${p.title}”`, { type: 'success' });
+              refreshSummaries();
+              location.hash = '#/library';
+            });
+          },
+        },
+      ];
+    },
   });
 
   return h('div', { class: 'btn-group detail-actions' }, reviewBtn, editBtn, more.el);

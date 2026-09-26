@@ -323,6 +323,8 @@ class Handler(BaseHTTPRequestHandler):
             stdin = data.get("stdin") or ""
             if not isinstance(stdin, str):
                 raise ApiError(HTTPStatus.BAD_REQUEST, "stdin must be text")
+            if len(stdin) > 1000000:
+                raise ApiError(HTTPStatus.BAD_REQUEST, "stdin is too long (max 1000000 characters)")
             # Deliberately outside self.lock: a run can take up to ~10s and doesn't
             # touch the database, so it must never block other requests. runner's own
             # lock (one run at a time) is what actually serializes this endpoint.
@@ -340,11 +342,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/claude/key":
             if method == "PUT":
                 data = self._body()
-                claude_help.save_api_key(store, data.get("api_key"))
+                with self.lock:
+                    claude_help.save_api_key(store, data.get("api_key"))
                 return self._json(200, {"ok": True})
             if method == "DELETE":
                 self._body()
-                claude_help.delete_api_key(store)
+                with self.lock:
+                    claude_help.delete_api_key(store)
                 return self._json(200, {"ok": True})
 
         if path == "/api/claude/test" and method == "POST":

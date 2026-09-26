@@ -88,8 +88,9 @@ whole app.
 
 The **Today** review card also has a collapsible **Code it here** section, so you can recode a
 problem from scratch while reviewing it without leaving the card. It always starts blank (never
-your saved draft, which would spoil the recode) and only saves to your draft if you press
-**Save to draft** – otherwise nothing about it is kept once you rate the card.
+your saved draft, which would spoil the recode), but as soon as you start typing it autosaves to
+that problem's draft – replacing whatever attempt was saved there before. That's the same draft
+the problem page's Attempt editor reads from, so it always reflects your latest attempt.
 
 You can turn code running off entirely (Settings → Code runner → *Allow running code*); you can
 still write and save attempts, just not execute them.

@@ -535,6 +535,13 @@ class RunEndpointTest(ServerTestCase):
     def test_code_over_limit_rejected(self):
         self.assertError(self.request("POST", "/api/run", {"code": "x" * 100001}), 400, "too long")
 
+    def test_stdin_over_limit_rejected(self):
+        resp = self.request("POST", "/api/run", {"code": "print(1)", "stdin": "x" * 1000001})
+        self.assertError(resp, 400, "too long")
+        # right at the cap still works
+        data = self.call("POST", "/api/run", {"code": "import sys\nprint(len(sys.stdin.read()))", "stdin": "x" * 1000000})
+        self.assertEqual(data["stdout"], "1000000\n")
+
     def test_disabled_by_setting_returns_403(self):
         self.call("PATCH", "/api/settings", {"allow_code_run": False})
         self.assertError(self.request("POST", "/api/run", {"code": "print(1)"}), 403)
