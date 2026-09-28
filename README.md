@@ -109,8 +109,8 @@ as Markdown. It's off by default; turn it on in **Settings → Claude help**, in
   `data/secrets.json` on your computer (not the app's database, so it's never swept up by
   Export/Import backups), and never appears in any API response.
 - **Claude Code CLI** – if you already have the [`claude` CLI](https://claude.com/product/claude-code)
-  installed and signed in (`npm install -g @anthropic-ai/claude-code`, then run `claude` once in a
-  terminal to sign in), turn this on instead: the app runs that CLI on your computer, using
+  installed and signed in (in PowerShell: `irm https://claude.ai/install.ps1 | iex`, then run
+  `claude` once in a new terminal to sign in, then restart this app), turn this on instead: the app runs that CLI on your computer, using
   whatever Claude plan you're signed into. **The app never asks for, reads or stores your Claude
   login** – it only invokes the `claude` command you've already authenticated yourself. (This
   isn't a shortcut: Anthropic's policies don't allow third-party apps like this one to collect or
@@ -120,7 +120,16 @@ Either way, each request sends Claude the problem's title/difficulty/URL/prompt 
 code, and your latest run's output – never your own saved *Key insight*, *Notes* or *Solution*
 (those are your spoilers, kept local). Pick a model (Haiku 4.5, Sonnet 5, or Opus 5.5) in Settings;
 Settings also has a **Test connection** button to check everything's wired up before you rely on
-it mid-review.
+it mid-review. Replies stream in – the reply bubble appears right away and fills in as Claude
+writes it, instead of waiting for the whole thing at once.
+
+**Coaching style** – how Claude coaches you (the standing instructions, plus what each of the
+Hint/Debug/Explain/Review buttons asks for) lives in `prompts/claude-coach.md`, not in the app's
+code. Open that file and edit it in plain text: everything above the first `## Mode: ...` heading
+is the standing instructions sent with every question, and each `## Mode: hint/debug/explain/review`
+section is what that button adds. Comments (`<!-- like this -->`) are notes for you and are never
+sent. The app re-reads the file for every question, so edits apply immediately – no restart needed.
+If you delete a section (or the whole file), that part just falls back to the app's built-in wording.
 
 ## NeetCode 150 tracker
 
@@ -277,6 +286,7 @@ app/server.py           HTTP server + JSON API (standard library only)
 app/store.py            SQLite storage, queue, stats, backup/import, drafts
 app/runner.py           runs Attempt-editor code as a local Python process (POST /api/run)
 app/claude_help.py      "Ask Claude" debugging help (API key or Claude Code CLI, see above)
+prompts/claude-coach.md how Claude coaches you - edit this to change its wording (see above)
 app/scheduling.py       FSRS-6 wrapper with the coding-problem tweaks above
 app/neetcode.py         NeetCode 150 tracker (matches the list against your library)
 app/neetcode150.json    the NeetCode 150 list (from github.com/neetcode-gh/leetcode), incl. starter code

@@ -368,7 +368,60 @@ class Handler(BaseHTTPRequestHandler):
             data = self._body()
             return self._json(200, claude_help.handle_help(store, data))
 
+        if path == "/api/claude/help/stream" and method == "POST":
+            data = self._body()
+            return self._claude_help_stream(data)
+
         raise ApiError(HTTPStatus.NOT_FOUND, f"no API route for {method} {path}")
+
+    def _claude_help_stream(self, body: dict):
+        """POST /api/claude/help/stream: same request/validation as /api/claude/help,
+        but the reply arrives as newline-delimited JSON events while Claude is still
+        writing it (see claude_help.stream_help for the event shapes).
+
+        claude_help.stream_help() does all of its validation eagerly and raises for
+        anything detectable before any bytes reach the browser (bad body, mode off,
+        bad problem id, no key, CLI not found) - those exceptions propagate up to
+        _dispatch's normal Invalid/NotFound/ClaudeError handling, same as any other
+        endpoint, so the caller still gets an ordinary JSON error response for them.
+        Only once we have a generator in hand do we commit to the streaming response;
+        anything that goes wrong after that point is the generator's own job to turn
+        into an {"type": "error", ...} event, since normal JSON error headers can no
+        longer be sent (the 200 + ndjson headers are already on the wire).
+        """
+        gen = claude_help.stream_help(self.store, body)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+        self.send_header("Connection", "close")
+        self._security_headers()  # includes Cache-Control: no-store
+        self.end_headers()
+        # Belt and suspenders: protocol_version stays the default "HTTP/1.0", so the
+        # base handler already closes the connection after every response (there's no
+        # Content-Length here for the client to know where the body ends otherwise) -
+        # this just makes that explicit for a response built by hand like this one.
+        self.close_connection = True
+        try:
+            for event in gen:
+                self.wfile.write(json.dumps(event, ensure_ascii=False).encode("utf-8") + b"\n")
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError):
+            # The browser went away mid-stream: stop pulling from the generator right
+            # away so its `finally` (kill the CLI subprocess / close the upstream
+            # response - see claude_help._stream_cli / _stream_api) runs immediately,
+            # then let _dispatch's own ConnectionError handling close the socket.
+            gen.close()
+            raise
+        except Exception:
+            # A bug mid-stream: the 200 headers are already sent, so report it as a
+            # final error event instead of letting _dispatch write a second response.
+            traceback.print_exc()
+            gen.close()
+            try:
+                line = {"type": "error", "message": "Unexpected error while streaming (details are in the app's terminal window)."}
+                self.wfile.write(json.dumps(line).encode("utf-8") + b"\n")
+                self.wfile.flush()
+            except OSError:
+                pass
 
 
 def main(argv=None):

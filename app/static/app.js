@@ -162,6 +162,36 @@ async function api(method, path, body, extra) {
   return data;
 }
 
+/** POSTs to a newline-delimited-JSON streaming endpoint (only /api/claude/help/stream
+ * today) and returns a ReadableStreamDefaultReader over the response body. A non-200
+ * response is read as ordinary JSON and thrown as an ApiError, same as api() - the
+ * caller never sees a "stream" for an error the server could detect up front. */
+async function postStream(path, body, signal) {
+  let res;
+  try {
+    res = await fetch(path, {
+      method: 'POST',
+      headers: { Accept: 'application/x-ndjson', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
+      signal,
+    });
+  } catch (err) {
+    if (err && err.name === 'AbortError') throw err;
+    throw new ApiError("Can't reach the DSA Review server. Is it still running?", 0);
+  }
+  if (res.status !== 200) {
+    let data = null;
+    try {
+      data = await res.json();
+    } catch {
+      data = null;
+    }
+    const msg = data && typeof data.error === 'string' ? data.error : `Request failed (${res.status})`;
+    throw new ApiError(msg, res.status);
+  }
+  return res.body.getReader();
+}
+
 // ================================================================ toasts & dialog
 const toastRoot = document.getElementById('toasts');
 
@@ -824,7 +854,6 @@ function claudeAssist({ problem, getCode, getLastRun, alwaysDefaultHint = false 
       threadEl.replaceChildren();
     },
   }, 'New conversation');
-  const loadingRow = h('p', { class: 'claude-loading', hidden: true, role: 'status' }, 'Asking Claude…');
   const privacyNote = h('p', { class: 'hint claude-privacy' });
 
   function paintPrivacy() {
@@ -840,7 +869,7 @@ function claudeAssist({ problem, getCode, getLastRun, alwaysDefaultHint = false 
   const form = h('div', { class: 'claude-form' },
     modeGroup, questionInput,
     h('div', { class: 'btn-group claude-actions' }, askBtn, cancelBtn, newConvoBtn),
-    loadingRow, privacyNote);
+    privacyNote);
   const panel = h('div', {
     class: 'claude-panel', id: panelId, hidden: true, 'aria-label': 'Ask Claude',
   }, offNotice, threadEl, form);
@@ -881,6 +910,49 @@ function claudeAssist({ problem, getCode, getLastRun, alwaysDefaultHint = false 
     }
   }
 
+  // Streams NDJSON lines ({"type":"delta"|"done"|"error", ...} - see docs/API.md) from
+  // `reader` and returns {doneEvent, errorEvent}: whichever terminal event arrived (or
+  // both null, if the stream just closed without one). `onDelta(text)` is called with
+  // each delta's text so the caller can accumulate and paint the partial reply.
+  async function readHelpStream(reader, onDelta) {
+    const decoder = new TextDecoder();
+    let buf = '';
+    let doneEvent = null;
+    let errorEvent = null;
+    outer: while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n')) !== -1) {
+        const line = buf.slice(0, idx);
+        buf = buf.slice(idx + 1);
+        if (!line.trim()) continue;
+        let evt;
+        try {
+          evt = JSON.parse(line);
+        } catch {
+          continue; // ignore a malformed line rather than blow up an otherwise-good reply
+        }
+        if (evt.type === 'delta') {
+          onDelta(evt.text || '');
+        } else if (evt.type === 'done') {
+          doneEvent = evt;
+          break outer;
+        } else if (evt.type === 'error') {
+          errorEvent = evt;
+          break outer;
+        }
+      }
+    }
+    try {
+      await reader.cancel();
+    } catch {
+      // ignore - we're done reading either way
+    }
+    return { doneEvent, errorEvent };
+  }
+
   async function ask() {
     if (busy) return;
     const st = await ensureStatus();
@@ -903,8 +975,40 @@ function claudeAssist({ problem, getCode, getLastRun, alwaysDefaultHint = false 
     busy = true;
     askBtn.disabled = true;
     cancelBtn.hidden = false;
-    loadingRow.hidden = false;
     abortCtrl = new AbortController();
+
+    // Claude's reply bubble goes up immediately, right where the answer will appear
+    // (above the question box, in the thread) - with a "Thinking…" placeholder that
+    // gets replaced by the reply as it streams in.
+    const textEl = h('div', { class: 'claude-msg-text' });
+    const thinking = h('p', { class: 'hint claude-thinking' }, 'Thinking…');
+    const msgRow = h('div', { class: 'claude-msg claude-msg-assistant', 'aria-busy': 'true' },
+      h('div', { class: 'claude-msg-role', text: 'Claude' }),
+      h('div', { class: 'claude-msg-body' }, thinking, textEl));
+    threadEl.append(msgRow);
+
+    // Re-renders textEl from Markdown at most every ~80ms, so a burst of small deltas
+    // doesn't force a re-render (and a Markdown re-parse) on every single one.
+    let paintScheduled = false;
+    let lastPaint = 0;
+    function paint(text) {
+      textEl.replaceChildren(renderMarkdown(text));
+    }
+    function schedulePaint(text) {
+      if (paintScheduled) return;
+      paintScheduled = true;
+      requestAnimationFrame(function tick(now) {
+        if (now - lastPaint < 80) {
+          requestAnimationFrame(tick);
+          return;
+        }
+        paintScheduled = false;
+        lastPaint = now;
+        if (gen === convoGen) paint(text);
+      });
+    }
+
+    let fullText = '';
     try {
       const body = {
         problem_id: problem.id, code, mode, question,
@@ -914,24 +1018,55 @@ function claudeAssist({ problem, getCode, getLastRun, alwaysDefaultHint = false 
         } : null,
         history,
       };
-      const res = await api('POST', '/api/claude/help', body, { signal: abortCtrl.signal });
+      const reader = await postStream('/api/claude/help/stream', body, abortCtrl.signal);
+      let { doneEvent, errorEvent } = await readHelpStream(reader, (deltaText) => {
+        fullText += deltaText;
+        if (thinking.isConnected) thinking.remove();
+        schedulePaint(fullText);
+      });
+      if (!doneEvent && !errorEvent) {
+        // The connection closed without a terminal event (e.g. the server process
+        // was killed) - don't present a possibly-truncated reply as the final one.
+        errorEvent = { message: 'Lost the connection to the server while streaming.' };
+      }
       if (gen !== convoGen) return; // stale: the conversation was reset while this was in flight
+      thinking.remove();
+      if (errorEvent) {
+        paint(fullText); // keep whatever text already arrived
+        msgRow.append(h('p', { class: 'claude-error', text: errorEvent.message || 'Something went wrong.' }));
+        msgRow.removeAttribute('aria-busy');
+        return; // not added to history
+      }
+      const finalText = doneEvent ? doneEvent.text : fullText;
+      paint(finalText);
+      msgRow.removeAttribute('aria-busy');
+      msgRow.setAttribute('aria-live', 'polite'); // announce the finished reply once, not every delta
       history = [...history,
         { role: 'user', content: claudeHistoryEntry(problem, code, lastRun, question, isFirst) },
-        { role: 'assistant', content: clip(res.text, 19500) }];
-      addMessage('assistant', renderMarkdown(res.text));
+        { role: 'assistant', content: clip(finalText, 19500) }];
     } catch (err) {
       if (gen === convoGen) questionInput.value = questionBeforeClear; // nothing was sent; give it back
       if (err && err.name === 'AbortError') {
-        threadEl.lastElementChild?.remove(); // drop the user turn we just added; nothing was answered
+        if (gen !== convoGen) {
+          // "New conversation" already reset the thread; nothing here to clean up.
+        } else if (fullText) {
+          paint(fullText); // keep whatever text already arrived
+          msgRow.append(h('p', { class: 'hint claude-stopped', text: '(stopped)' }));
+          msgRow.removeAttribute('aria-busy');
+        } else {
+          msgRow.remove();
+          threadEl.lastElementChild?.remove(); // drop the user turn too; nothing was answered
+        }
       } else if (gen === convoGen) {
-        addMessage('assistant', h('p', { class: 'claude-error', text: err.message || String(err) }));
+        thinking.remove();
+        paint(fullText);
+        msgRow.append(h('p', { class: 'claude-error', text: err.message || String(err) }));
+        msgRow.removeAttribute('aria-busy');
       }
     } finally {
       busy = false;
       askBtn.disabled = false;
       cancelBtn.hidden = true;
-      loadingRow.hidden = true;
       abortCtrl = null;
     }
   }
@@ -4065,9 +4200,9 @@ async function claudeHelpCard(s, seq) {
       ? `Found the \`claude\` command at ${status.cli.path}.`
       : 'The `claude` command wasn’t found on this computer’s PATH yet.');
   const cliSteps = h('ol', { class: 'cli-steps' },
-    h('li', null, 'Install Node.js.'),
-    h('li', null, h('code', { text: 'npm install -g @anthropic-ai/claude-code' })),
-    h('li', null, 'Run ', h('code', { text: 'claude' }), ' in a terminal and sign in.'));
+    h('li', null, 'In PowerShell, run ', h('code', { text: 'irm https://claude.ai/install.ps1 | iex' }), '.'),
+    h('li', null, 'Open a new PowerShell window, run ', h('code', { text: 'claude' }), ' and sign in with your Claude plan.'),
+    h('li', null, 'Restart this app (close and reopen run.bat) so it can find ', h('code', { text: 'claude' }), '.'));
 
   // ---- test connection
   const testResult = h('p', { class: 'hint claude-test-result', role: 'status' });
@@ -4115,7 +4250,9 @@ async function claudeHelpCard(s, seq) {
       h('h2', { id: 'claude-title', text: 'Claude help' }),
       h('p', { text: 'Debugging hints, explanations and code review from Claude on the Attempt editor.' })),
     modeGroup,
-    sectionsHost);
+    sectionsHost,
+    h('p', { class: 'hint' },
+      'Edit how Claude coaches you in ', h('code', { text: 'prompts/claude-coach.md' }), ' (no restart needed).'));
 }
 
 // ================================================================ router

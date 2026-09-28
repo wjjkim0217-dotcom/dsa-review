@@ -112,6 +112,7 @@ problems are the main deck's new problems (up to its limit) followed by the Neet
 | `DELETE /api/claude/key` | `{}` | `{ok: true}` |
 | `POST /api/claude/test` | `{}` | `{ok: true, text, via: "api"\|"cli"}` – makes one tiny real request in the current mode. 409 if `claude_mode` is `"off"`; 502 for upstream failures |
 | `POST /api/claude/help` | `{problem_id, code: string (max 100000 chars), run?: {stdout, stderr, exit_code, timed_out}, mode: "hint"\|"debug"\|"explain"\|"review", question?: string (max 4000 chars), history?: [{role: "user"\|"assistant", content: string}] (max 12 entries, each max 20000 chars)}` | `{text, via: "api"\|"cli", model}` – see **Ask Claude** below. 400 on a bad body, 404 if `problem_id` doesn't exist, 409 if `claude_mode` is `"off"`, 502 for upstream failures |
+| `POST /api/claude/help/stream` | same body as `POST /api/claude/help` | the same reply, streamed – see **Ask Claude** below. Anything detectable up front (bad body, `claude_mode` off, bad `problem_id`, no key, `claude` not found) is still an ordinary JSON error response with the same statuses as `/api/claude/help`; anything that only goes wrong once the reply is already in flight becomes an `"error"` line in the stream instead (see below) |
 
 `interval_preview` = `{good_every_time:[days×7], hard_first_then_good:[…], hard_every_time:[…]}` –
 the gap before each successive review if you keep rating that way.
@@ -224,9 +225,12 @@ Two ways to connect, chosen in Settings → Claude help:
   you for a Claude.ai password, cookie or session token (Anthropic's policies for third-party apps
   don't allow that).
 
-`POST /api/claude/help` builds a prompt from the problem's title/difficulty/URL/prompt text (never
-your saved insight/notes/solution – those are your own spoilers), your current code, and the
-latest run's output, plus instructions for the requested `mode`:
+`POST /api/claude/help` (and its streaming counterpart, `POST /api/claude/help/stream` – same body)
+build a prompt from the problem's title/difficulty/URL/prompt text (never your saved
+insight/notes/solution – those are your own spoilers), your current code, and the latest run's
+output, plus instructions for the requested `mode`. The standing instructions (system prompt) and
+the per-`mode` instructions below are the built-in defaults; if `prompts/claude-coach.md` exists,
+its content is used instead (per-section – see the file, or **Claude help** in the README):
 
 - `hint` – the smallest useful nudge; never the solution.
 - `debug` – finds the bug(s), explains why, points at the line(s), and shows a minimal fix for just
@@ -239,3 +243,24 @@ latest run's output, plus instructions for the requested `mode`:
 fresh, stateless call to Claude either way – there's no server-side conversation state). Timeouts:
 90s for API mode, 180s for CLI mode (`claude` cold starts are slower). `GET /api/claude/status`
 never runs the CLI itself, only checks whether it's on `PATH`.
+
+### `POST /api/claude/help/stream`
+
+Same request body, validation and error statuses as `POST /api/claude/help` for anything
+detectable before the reply starts (see the endpoint table above); a successful reply is instead
+streamed back as **newline-delimited JSON**: `Content-Type: application/x-ndjson; charset=utf-8`,
+no `Content-Length` (the connection is closed to mark the end of the body), `Cache-Control:
+no-store`, the same security headers as every other response. Each line is one JSON object:
+
+```jsonc
+{"type": "delta", "text": "..."}                                    // zero or more, as Claude writes
+{"type": "done", "text": "<full text>", "via": "api"|"cli", "model": "..."}   // exactly one, last
+// - or, instead of "done", if something failed only once the reply was already streaming -
+{"type": "error", "message": "<friendly message>"}
+```
+
+Concatenating every `"delta"` line's `text` reproduces the `"done"` line's `text`; treat `"done"`'s
+`text` as authoritative (e.g. for re-rendering the final Markdown) rather than re-concatenating
+yourself. A dropped connection mid-reply (in either direction) tears down the in-flight request on
+the server side too – the Anthropic HTTP response is closed, or the `claude` subprocess and its
+whole process tree are killed – rather than continuing to burn tokens for a reply nobody will see.

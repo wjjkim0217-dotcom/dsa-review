@@ -701,7 +701,10 @@ button.chip[aria-pressed="true"] { background: var(--accent-soft); border-color:
 .claude-msg-body { font-size: 0.9rem; line-height: 1.5; overflow-wrap: anywhere; }
 .claude-msg-body > :first-child { margin-top: 0; }
 .claude-msg-body > :last-child { margin-bottom: 0; }
+.claude-msg-text:empty { display: none; }
+.claude-thinking { font-style: italic; }
 .claude-error { color: var(--again); }
+.claude-msg-body .claude-error, .claude-msg-body .claude-stopped { margin-top: 6px; }
 .claude-mode-group { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .claude-mode-choice {
   display: inline-flex; align-items: center; gap: 6px;
@@ -712,7 +715,6 @@ button.chip[aria-pressed="true"] { background: var(--accent-soft); border-color:
 .claude-mode-choice:has(input:checked) { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-soft-text); }
 .claude-question { width: 100%; min-height: 52px; resize: vertical; font-size: 0.88rem; margin-bottom: 8px; }
 .claude-actions { flex-wrap: wrap; }
-.claude-loading { color: var(--muted); font-size: 0.84rem; margin: 8px 0 0; }
 .claude-privacy { margin-top: 8px; }
 
 /* ------------------------------------------------------------------ Markdown (Claude replies) */
