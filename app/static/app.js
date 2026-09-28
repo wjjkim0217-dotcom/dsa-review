@@ -1711,11 +1711,13 @@ async function viewToday(main, { seq, deck = 'main' }) {
   const sub = deck === 'neetcode'
     ? 'Review session for your NeetCode 150 deck.'
     : studyNow().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  main.append(
+  // .filter(Boolean): the browser's own append() would print a null as the text "null"
+  // (the NeetCode nudge card only exists on the main Today page).
+  main.append(...[
     pageHead(DECK_LABEL[deck], sub),
     deck === 'main' ? ncNudgeEl : null,
     statsEl, sessionEl, forecastEl,
-  );
+  ].filter(Boolean));
   forecastEl.hidden = true;
 
   const ctrl = { seq, deck, statsEl, sessionEl, forecastEl, queue: null, card: null, syncToken: 0, cardToken: 0 };

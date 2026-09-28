@@ -552,7 +552,7 @@ button.chip[aria-pressed="true"] { background: var(--accent-soft); border-color:
 .timer.is-over .timer-state { color: var(--hard); font-weight: 600; }
 .timer .btn-group { margin-left: auto; }
 
-.notes-toggle { margin-top: 16px; }
+.notes-toggle { margin-top: 16px; margin-right: 8px; } /* small gap before "Code it here" */
 .notes-panel {
   margin-top: 14px;
   border-top: 1px dashed var(--border-strong);
