@@ -172,6 +172,29 @@ problems as progress).
 - Every problem's edit form and detail page show which deck it's in, and let you move it between
   decks directly (moving a problem never changes its schedule).
 
+### Load from LeetCode
+
+For a problem that matches a NeetCode 150 problem (the same link-or-title match `starter_code`
+uses), the Problem page's **Problem** card has a **Load from LeetCode** button when there's no
+saved statement yet, and a small **Reload from LeetCode** button (which asks first) once there
+is one; the **Today** / **NeetCode review** / **Review now** cards offer the same **Load from
+LeetCode** button when a due problem's prompt is empty. Pressing it fetches that problem's
+statement from LeetCode and saves it as the Prompt field, converted to plain text (code samples,
+lists, superscripts, etc. come through readably; images show as `[image]`, since they aren't
+downloaded – open the problem on LeetCode for those).
+
+- **Manual only** – this never runs on its own, never in bulk, and never for a problem that isn't
+  one of the NeetCode 150. It only ever runs when you press one of these buttons.
+- The statement is saved to **your local database only**, exactly like typing it into Edit
+  yourself – it's part of your normal backup/export, never bundled into this project's own repo.
+- It uses LeetCode's own (unofficial, undocumented) GraphQL API – the same one leetcode.com's own
+  problem pages call – since there's no official public API for this. That means it can break or
+  get rate-limited/blocked at any time; if that happens, open the problem on LeetCode and paste
+  the statement in with Edit instead. LeetCode's terms restrict automated access to their site, so
+  use this for your own practice, not for pulling problem sets in bulk.
+- LeetCode Premium-only problems won't load this way (LeetCode only shares those statements with
+  Premium accounts) – open it on LeetCode (or watch NeetCode's video) and paste it in with Edit.
+
 ## How the scheduling works
 
 The app uses **FSRS-6** (Free Spaced Repetition Scheduler), the algorithm behind Anki's modern
@@ -275,6 +298,10 @@ The app is a local web server, so it's built to stay local:
   included in any response, export or log line. In CLI mode, the app never reads or stores the
   `claude` CLI's own credentials, and never asks you for a Claude.ai password, cookie or session
   token – see **Claude help** above.
+- **Load from LeetCode only ever talks to `leetcode.com`**, only when you press its button, and
+  only fetches (never posts anything of yours to it). Like Ask Claude, the fetch happens on the
+  server, not the browser – the page's Content-Security-Policy still only lets the *browser*
+  call this app's own server. See **Load from LeetCode** above.
 
 ## Project layout
 
@@ -290,6 +317,7 @@ prompts/claude-coach.md how Claude coaches you - edit this to change its wording
 app/scheduling.py       FSRS-6 wrapper with the coding-problem tweaks above
 app/neetcode.py         NeetCode 150 tracker (matches the list against your library)
 app/neetcode150.json    the NeetCode 150 list (from github.com/neetcode-gh/leetcode), incl. starter code
+app/leetcode_fetch.py   "Load from LeetCode": fetches a problem statement from LeetCode on request
 tools/neetcode/         build_scaffolds.py: regenerates that starter code (needs internet)
 app/static/             the web page (HTML/CSS/JS, no external dependencies)
 app/static/vendor/      the vendored CodeMirror editor bundle (see tools/codemirror/build.md)

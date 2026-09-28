@@ -317,3 +317,37 @@ class StarterCodeTest(unittest.TestCase):
     def test_tracker_payload_leaves_starter_out(self):
         payload = neetcode.build_tracker([])
         self.assertNotIn("starter", payload["problems"][0])
+
+
+class MatchProblemTest(unittest.TestCase):
+    """neetcode.match_problem - the match shared by starter_for (editor starter code)
+    and the "Load from LeetCode" endpoint (app/server.py, app/leetcode_fetch.py)."""
+
+    def test_matches_by_link_first(self):
+        match = neetcode.match_problem({"title": "whatever this is called", "url": "https://leetcode.com/problems/two-sum/"})
+        self.assertEqual(match["slug"], "two-sum")
+
+    def test_falls_back_to_exact_title(self):
+        match = neetcode.match_problem({"title": "  two   SUM ", "url": ""})
+        self.assertEqual(match["slug"], "two-sum")
+
+    def test_no_match_is_none(self):
+        self.assertIsNone(neetcode.match_problem({"title": "My own problem", "url": ""}))
+
+    def test_link_wins_over_a_different_title(self):
+        # A link to one NeetCode problem with a title that doesn't match it at all -
+        # the link still wins (same precedence starter_for and the tracker use).
+        match = neetcode.match_problem({"title": "Not Two Sum At All", "url": "https://leetcode.com/problems/two-sum/"})
+        self.assertEqual(match["slug"], "two-sum")
+
+    def test_returns_the_full_nc_problem_dict(self):
+        match = neetcode.match_problem({"title": "Two Sum", "url": ""})
+        self.assertEqual(match["title"], "Two Sum")
+        self.assertIn("starter", match)
+        self.assertIn("leetcode_url", match)
+
+    def test_starter_for_and_match_problem_agree(self):
+        for slug in ("two-sum", "reverse-linked-list", "lru-cache"):
+            problem = {"title": "irrelevant", "url": f"https://leetcode.com/problems/{slug}/"}
+            match = neetcode.match_problem(problem)
+            self.assertEqual(match["starter"], neetcode.starter_for(problem))

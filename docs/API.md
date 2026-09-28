@@ -64,6 +64,10 @@ matched by its LeetCode link or exact title, in either deck; `null` otherwise. I
 `starter` field of `app/neetcode150.json` (regenerate with `tools/neetcode/build_scaffolds.py`);
 `GET /api/neetcode` leaves that field out.
 
+Those same responses also include `"neetcode_slug": "two-sum" | null` - the LeetCode URL slug of
+the NeetCode 150 problem this one matches (same match as `starter_code`), or `null` if it doesn't
+match one. The frontend uses this to decide whether to offer **Load from LeetCode** (see below).
+
 ## Deck scope (`deck=` query param)
 
 `GET /api/problems`, `GET /api/queue`, `GET /api/summary` and `GET /api/tags` all take an
@@ -106,6 +110,7 @@ problems are the main deck's new problems (up to its limit) followed by the Neet
 | `POST /api/reset` | `{"confirm": "DELETE", "reset_settings"?: bool}` (the exact string `"DELETE"` is required; anything else → 400) | `{deleted: {problems, reviews, drafts}, settings_reset, backup}`. Deletes every problem, review and draft in both decks (ids restart at 1) after saving a copy of the database to `data/backups/before-reset-<time>.db` (the last 5 are kept; startup backups never prune them). Settings are kept unless `reset_settings` is true. The Claude API key (`data/secrets.json`) is never touched. |
 | `GET /api/problems/:id/draft` | – | `{code, language, updated_at}` – your saved attempt for this problem (the Attempt editor's autosave). `{code: "", language: "python", updated_at: null}` when nothing is saved yet |
 | `PUT /api/problems/:id/draft` | `{code: string (max 100000 chars), language?: string}` | the saved draft, same shape as the GET. `language` defaults to `"python"` when omitted |
+| `POST /api/problems/:id/leetcode-statement` | `{}` or `{replace: true}` | full problem, with its Prompt field set to the statement fetched from LeetCode – see **Load from LeetCode** below. 400 if the problem doesn't match a NeetCode 150 problem; 409 if it already has a non-empty prompt and `replace` isn't `true`; 404/403/502 for LeetCode-side failures (problem not found, Premium-only, blocked/unreachable/timed out/unexpected response) |
 | `POST /api/run` | `{code: string (max 100000 chars), stdin?: string (max 1000000 chars)}` | `{stdout, stderr, exit_code, timed_out, duration_ms, truncated}` – runs `code` as a real local Python process, see below. 403 when `allow_code_run` is off; 409 when another run is already in progress (only one run at a time) |
 | `GET /api/claude/status` | – | `{mode, model, api_key:{set, hint, source}, cli:{found, path}}` – see **Ask Claude** below. Fast; never runs the CLI, only checks it's on PATH |
 | `PUT /api/claude/key` | `{api_key: string}` (20-300 chars, no whitespace, must start with `sk-ant-`) | `{ok: true}`. The key is written to `data/secrets.json` (not the database), never returned by any endpoint |
@@ -178,6 +183,28 @@ history are never touched – only `deck` and `tags` change.
 - Body `{"problem_ids": [12, 34]}` adopts only those problem ids; each one must be in the
   current `adoptable` list, or the whole call is rejected with 400 (nothing is changed).
 - Returns `{"moved": 2, "tracker": { ...a fresh GET /api/neetcode payload... }}`.
+
+### `POST /api/problems/:id/leetcode-statement` – Load from LeetCode
+
+Fetches a NeetCode 150 problem's statement from LeetCode's (unofficial) GraphQL API and saves it
+as that problem's `prompt`, converted from LeetCode's HTML to plain text (see
+`app/leetcode_fetch.py`: paragraphs, `<pre>` blocks, lists, `<sup>`/`<sub>`, inline code, etc. are
+each handled; images become `[image]`). This is **manual only** – it runs exactly once per
+request, only for the problem in `:id`, only when this endpoint is called (the frontend calls it
+only from its "Load from LeetCode" / "Reload from LeetCode" buttons – see README). The result is
+written to the local database like any other `PATCH .../prompt` – nothing is ever committed to
+the repo.
+
+- The problem must match a NeetCode 150 problem the same way `starter_code` does (by LeetCode
+  link, else exact title – see `neetcode.match_problem`); otherwise `400`.
+- If the problem already has a non-empty `prompt`, the request needs `{"replace": true}` or it's
+  refused with `409` (the frontend confirms with the owner, then retries with `replace: true`).
+- `403` if the problem is LeetCode Premium-only (LeetCode doesn't share those statements without
+  a Premium account). `404` if LeetCode doesn't recognize the slug. `502` for anything else that
+  goes wrong reaching LeetCode (blocked, unreachable, timed out, unexpected response shape).
+- On success: `200` with the full, updated problem (same shape as `GET /api/problems/:id`).
+- The LeetCode request itself runs outside the server's write lock (it's network I/O, like Ask
+  Claude and `/api/run`); only the database write that follows takes the lock.
 
 ## `POST /api/run` – the local code runner
 

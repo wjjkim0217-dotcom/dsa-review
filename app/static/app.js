@@ -1099,6 +1099,44 @@ function starterTemplate(p) {
 }
 
 /**
+ * A "Load from LeetCode" (or, with `replace`, "Reload from LeetCode") button: posts to
+ * POST /api/problems/:id/leetcode-statement and calls `onLoaded(updatedProblem)` on
+ * success. Manual only - this is the one and only place that endpoint is ever called
+ * from, and only in response to this button being pressed (see the Problem page's
+ * empty prompt state / reload control, and the review card's empty prompt state).
+ * `replace` confirms first (LeetCode's statement can change) and sends `{replace:
+ * true}`; without it, an empty prompt is loaded straight away. While the request is in
+ * flight the button is disabled and reads "Loading…"; on error it's restored so the
+ * owner can retry, and the server's message is shown with toastError.
+ */
+function leetcodeLoadButton(problem, { replace = false, label = 'Load from LeetCode', className = 'btn', onLoaded }) {
+  const btn = h('button', { type: 'button', class: className }, label);
+  btn.addEventListener('click', async () => {
+    if (replace) {
+      const ok = await confirmDialog({
+        title: 'Reload from LeetCode?',
+        body: 'Replace the saved statement with LeetCode’s current version?',
+        confirmLabel: 'Replace',
+      });
+      if (!ok) return;
+    }
+    btn.disabled = true;
+    const prevText = btn.textContent;
+    btn.textContent = 'Loading…';
+    try {
+      const updated = await api('POST', `/api/problems/${problem.id}/leetcode-statement`, replace ? { replace: true } : {});
+      toast('Loaded the statement from LeetCode.', { type: 'success' });
+      onLoaded(updated);
+    } catch (err) {
+      toastError(err);
+      btn.disabled = false;
+      btn.textContent = prevText;
+    }
+  });
+  return btn;
+}
+
+/**
  * options:
  *   problem       - the problem this attempt is for (used for the title and starter code)
  *   initialCode   - code to load the editor with
@@ -1407,15 +1445,38 @@ function createReviewCard(p, { mode, onRated, onSkip, onClose }) {
   const head = h('div', { class: 'rc-head' }, kicker, title, meta);
 
   // ---------- prompt & instruction
-  const hasPrompt = Boolean(p.prompt && p.prompt.trim());
-  const prompt = hasPrompt
-    ? h('div', { class: 'prompt', text: p.prompt })
-    : h('div', {
+  // A holder so a "Load from LeetCode" fetch can swap this one area in place (no full
+  // card re-render, no scroll change) - see paintPrompt below.
+  const prompt = h('div', { class: 'rc-prompt-holder' });
+  function paintPrompt(cur) {
+    const hasPrompt = Boolean(cur.prompt && cur.prompt.trim());
+    if (hasPrompt) {
+      prompt.replaceChildren(h('div', { class: 'prompt', tabindex: '-1', text: cur.prompt }));
+      return;
+    }
+    if (cur.neetcode_slug) {
+      const loadBtn = leetcodeLoadButton(cur, {
+        className: 'btn btn-sm',
+        onLoaded: (updated) => {
+          p = updated;
+          paintPrompt(updated);
+          const loaded = prompt.querySelector('.prompt');
+          if (loaded) loaded.focus({ preventScroll: true });
+        },
+      });
+      prompt.replaceChildren(
+        h('div', { class: 'prompt is-empty', text: 'No prompt saved.' }),
+        loadBtn);
+      return;
+    }
+    prompt.replaceChildren(h('div', {
       class: 'prompt is-empty',
       text: p.url
         ? 'No prompt saved — open the link above.'
         : 'No prompt saved — work from the title, or add a prompt from the problem page.',
-    });
+    }));
+  }
+  paintPrompt(p);
   const instruction = h('p', { class: 'instruction' }, icon('info', 16),
     h('span', { text: 'Recode it from a blank file (your editor or LeetCode). No peeking at your notes until you’re done.' }));
 
@@ -3636,17 +3697,80 @@ function attemptCard(p, ctrl) {
   return section;
 }
 
+/** The Problem page's "Problem" card: the saved prompt, or - matched to a NeetCode 150
+ * problem - an empty state offering "Load from LeetCode", plus a small "Reload from
+ * LeetCode" ghost button in the header once a prompt is saved. A load/reload updates
+ * ctrl.p and repaints only this card's body in place: no full detail-page re-render,
+ * no scroll change (see renderDetail, which never touches this card again once it's
+ * mounted - everything after a load happens through applyUpdate/paint below). */
+function problemPromptCard(ctrl) {
+  const reloadBtn = h('button', { type: 'button', class: 'btn btn-sm btn-ghost', hidden: true }, 'Reload from LeetCode');
+  const body = h('div', null);
+  const section = h('section', { class: 'card', 'aria-labelledby': 'prompt-title' },
+    h('div', { class: 'card-head' }, h('h2', { id: 'prompt-title', text: 'Problem' }), reloadBtn),
+    body);
+
+  function applyUpdate(updated, { focusLoaded = false } = {}) {
+    ctrl.p = updated;
+    paint();
+    if (focusLoaded) {
+      const el = body.querySelector('.prompt');
+      if (el) el.focus({ preventScroll: true });
+    }
+  }
+
+  reloadBtn.addEventListener('click', async () => {
+    const ok = await confirmDialog({
+      title: 'Reload from LeetCode?',
+      body: 'Replace the saved statement with LeetCode’s current version?',
+      confirmLabel: 'Replace',
+    });
+    if (!ok) return;
+    reloadBtn.disabled = true;
+    const prevText = reloadBtn.textContent;
+    reloadBtn.textContent = 'Loading…';
+    try {
+      const updated = await api('POST', `/api/problems/${ctrl.p.id}/leetcode-statement`, { replace: true });
+      toast('Loaded the statement from LeetCode.', { type: 'success' });
+      applyUpdate(updated);
+    } catch (err) {
+      toastError(err);
+    } finally {
+      reloadBtn.disabled = false;
+      reloadBtn.textContent = prevText;
+    }
+  });
+
+  function paint() {
+    const cur = ctrl.p;
+    const hasPrompt = Boolean(cur.prompt && cur.prompt.trim());
+    reloadBtn.hidden = !(hasPrompt && cur.neetcode_slug);
+    if (hasPrompt) {
+      body.replaceChildren(h('div', { class: 'prompt', tabindex: '-1', text: cur.prompt }));
+      return;
+    }
+    const hintLine = h('p', { class: 'empty-note' },
+      'No problem statement saved. ',
+      cur.url ? h('a', { href: cur.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open it on LeetCode', icon('external', 12), srOnly(' (opens in a new tab)')) : null,
+      cur.url ? ' or add one with Edit.' : 'Add one with Edit.');
+    if (!cur.neetcode_slug) {
+      body.replaceChildren(hintLine);
+      return;
+    }
+    const loadBtn = leetcodeLoadButton(cur, {
+      className: 'btn btn-sm',
+      onLoaded: (updated) => applyUpdate(updated, { focusLoaded: true }),
+    });
+    body.replaceChildren(hintLine, loadBtn);
+  }
+
+  paint();
+  return section;
+}
+
 function detailBody(p, ctrl) {
   const emptyNote = (...parts) => h('p', { class: 'empty-note' }, parts);
-  const promptCard = h('section', { class: 'card', 'aria-labelledby': 'prompt-title' },
-    h('div', { class: 'card-head' }, h('h2', { id: 'prompt-title', text: 'Problem' })),
-    p.prompt.trim()
-      ? h('div', { class: 'prompt', text: p.prompt })
-      : emptyNote(
-        'No problem statement saved. ',
-        p.url ? h('a', { href: p.url, target: '_blank', rel: 'noopener noreferrer' }, 'Open it on LeetCode', icon('external', 12), srOnly(' (opens in a new tab)')) : null,
-        p.url ? ' or add one with Edit.' : 'Add one with Edit.',
-      ));
+  const promptCard = problemPromptCard(ctrl);
 
   // ---------- notes (spoilers while attempting - collapsed by default)
   const hasInsight = Boolean(p.insight);

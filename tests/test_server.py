@@ -10,6 +10,7 @@ import sys
 import tempfile
 import threading
 import unittest
+import urllib.error
 from datetime import date, datetime
 from http.server import ThreadingHTTPServer
 from unittest import mock
@@ -17,6 +18,7 @@ from unittest import mock
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _support import StoreTestCase, count_rows  # noqa: E402  (puts app/ on sys.path)
 
+import leetcode_fetch  # noqa: E402
 import server  # noqa: E402
 from store import Store  # noqa: E402
 
@@ -1219,20 +1221,154 @@ class ResetEndpointTest(ServerTestCase):
 
 
 class StarterCodeEndpointTest(ServerTestCase):
-    """Full-problem responses carry `starter_code` for NeetCode 150 problems."""
+    """Full-problem responses carry `starter_code` and `neetcode_slug` for NeetCode 150
+    problems (both come from the same match - see with_extras / neetcode.match_problem)."""
 
     def test_neetcode_problem_gets_leetcode_starter_code(self):
         created = self.create(title="Two Sum", url="https://leetcode.com/problems/two-sum/")
         self.assertIn("def twoSum(self, nums: List[int], target: int) -> List[int]:",
                       created["starter_code"])
+        self.assertEqual(created["neetcode_slug"], "two-sum")
         got = self.call("GET", f"/api/problems/{created['id']}")
         self.assertEqual(got["starter_code"], created["starter_code"])
+        self.assertEqual(got["neetcode_slug"], "two-sum")
         reviewed = self.call("POST", f"/api/problems/{created['id']}/review", {"rating": 3})
         self.assertEqual(reviewed["starter_code"], created["starter_code"])
+        self.assertEqual(reviewed["neetcode_slug"], "two-sum")
         patched = self.call("PATCH", f"/api/problems/{created['id']}", {"notes": "x"})
         self.assertEqual(patched["starter_code"], created["starter_code"])
+        self.assertEqual(patched["neetcode_slug"], "two-sum")
 
     def test_other_problems_get_null(self):
         created = self.create(title="My own problem")
         self.assertIsNone(created["starter_code"])
-        self.assertIsNone(self.call("GET", f"/api/problems/{created['id']}")["starter_code"])
+        self.assertIsNone(created["neetcode_slug"])
+        got = self.call("GET", f"/api/problems/{created['id']}")
+        self.assertIsNone(got["starter_code"])
+        self.assertIsNone(got["neetcode_slug"])
+
+
+class LeetCodeStatementEndpointTest(ServerTestCase):
+    """POST /api/problems/:id/leetcode-statement (app/leetcode_fetch.py). The problem
+    used to match a NeetCode 150 entry is always a real one (title/URL from
+    app/neetcode150.json, e.g. "Two Sum") - matching is what's under test, not content.
+    The GraphQL response content itself is always a made-up, fictional sample (never a
+    real LeetCode statement), per this project's rule against reproducing LeetCode text.
+    """
+
+    FICTIONAL_HTML = (
+        "<p>Given a list of fictional <code>widgets</code> and a fictional "
+        "<code>target</code>, return the indices of two widgets whose weight adds up "
+        "to <code>target</code>.</p>"
+        "<p><strong>Example 1:</strong></p>"
+        "<pre><strong>Input:</strong> widgets = [3,5,9], target = 8\n"
+        "<strong>Output:</strong> [0,1]</pre>"
+    )
+    FICTIONAL_TEXT = (
+        "Given a list of fictional `widgets` and a fictional `target`, return the "
+        "indices of two widgets whose weight adds up to `target`.\n\nExample 1:\n\n"
+        "Input: widgets = [3,5,9], target = 8\nOutput: [0,1]"
+    )
+
+    def _neetcode(self, **fields):
+        fields.setdefault("title", "Two Sum")
+        fields.setdefault("url", "https://leetcode.com/problems/two-sum/")
+        return self.create(**fields)
+
+    def _graphql_payload(self, content=None, is_paid_only=False, question=...):
+        if question is not ...:
+            return {"data": {"question": question}}
+        return {"data": {"question": {"title": "Two Sum", "isPaidOnly": is_paid_only,
+                                      "content": self.FICTIONAL_HTML if content is None else content}}}
+
+    def _mock_graphql(self, **kw):
+        payload = kw.pop("payload", self._graphql_payload())
+        return mock.patch.object(leetcode_fetch, "_post_graphql", return_value=payload, **kw)
+
+    # ------------------------------------------------------------------ matching / conflicts
+    def test_non_neetcode_problem_400(self):
+        p = self.create(title="A problem of my own")
+        resp = self.request("POST", f"/api/problems/{p['id']}/leetcode-statement", {})
+        self.assertError(resp, 400, "NeetCode 150")
+
+    def test_unknown_id_404(self):
+        resp = self.request("POST", "/api/problems/999999/leetcode-statement", {})
+        self.assertError(resp, 404)
+
+    def test_existing_prompt_without_replace_409(self):
+        p = self._neetcode(prompt="a statement already saved here")
+        resp = self.request("POST", f"/api/problems/{p['id']}/leetcode-statement", {})
+        self.assertError(resp, 409)
+        # Nothing was changed or fetched.
+        self.assertEqual(self.call("GET", f"/api/problems/{p['id']}")["prompt"], "a statement already saved here")
+
+    def test_existing_prompt_with_replace_200(self):
+        p = self._neetcode(prompt="a stale statement")
+        with self._mock_graphql():
+            got = self.call("POST", f"/api/problems/{p['id']}/leetcode-statement", {"replace": True})
+        self.assertEqual(got["prompt"], self.FICTIONAL_TEXT)
+        self.assertEqual(self.call("GET", f"/api/problems/{p['id']}")["prompt"], self.FICTIONAL_TEXT)
+
+    def test_empty_prompt_200_and_stored(self):
+        p = self._neetcode()
+        self.assertEqual(p["prompt"], "")
+        with self._mock_graphql():
+            got = self.call("POST", f"/api/problems/{p['id']}/leetcode-statement", {})
+        self.assertEqual(got["prompt"], self.FICTIONAL_TEXT)
+        self.assertEqual(self.call("GET", f"/api/problems/{p['id']}")["prompt"], self.FICTIONAL_TEXT)
+        self.assertEqual(got["neetcode_slug"], "two-sum")
+
+    def test_replace_must_be_bool(self):
+        p = self._neetcode()
+        resp = self.request("POST", f"/api/problems/{p['id']}/leetcode-statement", {"replace": "yes"})
+        self.assertError(resp, 400, "replace")
+
+    def test_replace_true_on_empty_prompt_is_fine(self):
+        # No conflict to begin with, but `replace: true` shouldn't be rejected either.
+        p = self._neetcode()
+        with self._mock_graphql():
+            got = self.call("POST", f"/api/problems/{p['id']}/leetcode-statement", {"replace": True})
+        self.assertEqual(got["prompt"], self.FICTIONAL_TEXT)
+
+    # ------------------------------------------------------------------ fetch errors
+    def test_fetch_error_becomes_json_error(self):
+        p = self._neetcode()
+        with mock.patch.object(leetcode_fetch, "_post_graphql", side_effect=urllib.error.URLError("boom")):
+            resp = self.request("POST", f"/api/problems/{p['id']}/leetcode-statement", {})
+        self.assertError(resp, 502, "internet connection")
+        # The prompt was never touched.
+        self.assertEqual(self.call("GET", f"/api/problems/{p['id']}")["prompt"], "")
+
+    def test_premium_problem_error(self):
+        p = self._neetcode()
+        payload = self._graphql_payload(is_paid_only=True, content="")
+        with self._mock_graphql(payload=payload):
+            resp = self.request("POST", f"/api/problems/{p['id']}/leetcode-statement", {})
+        self.assertError(resp, 403, "Premium")
+
+    def test_question_not_found_error(self):
+        p = self._neetcode()
+        payload = self._graphql_payload(question=None)
+        with self._mock_graphql(payload=payload):
+            resp = self.request("POST", f"/api/problems/{p['id']}/leetcode-statement", {})
+        self.assertError(resp, 404, "didn't recognize")
+
+    # ------------------------------------------------------------------ concurrency
+    def test_network_call_happens_outside_lock(self):
+        p = self._neetcode()
+        observed = []
+
+        def fake_post(payload, timeout):
+            observed.append(server.Handler.lock.locked())
+            return self._graphql_payload()
+
+        with mock.patch.object(leetcode_fetch, "_post_graphql", side_effect=fake_post):
+            self.call("POST", f"/api/problems/{p['id']}/leetcode-statement", {})
+        self.assertEqual(observed, [False])
+
+    # ------------------------------------------------------------------ guards
+    def test_is_a_guarded_write(self):
+        p = self._neetcode()
+        resp = self.request("POST", f"/api/problems/{p['id']}/leetcode-statement", {},
+                            headers={"Origin": "http://evil.example"})
+        self.assertError(resp, 403)

@@ -91,18 +91,27 @@ def _match_library_problems(library_problems: list[dict], nc_problems: list[dict
     return best
 
 
+def match_problem(problem: dict) -> dict | None:
+    """The NeetCode 150 problem (an entry of app/neetcode150.json) that a library
+    ``problem`` matches, or None. Matched by its LeetCode link first, falling back to
+    an exact (trimmed, whitespace-collapsed, case-insensitive) title match - the same
+    rule ``_match_library_problems`` uses for the tracker. Shared by ``starter_for``
+    (editor starter code) and the "Load from LeetCode" endpoint in server.py."""
+    nc_problems = get_data()["problems"]
+    slug = extract_leetcode_slug(problem.get("url"))
+    if slug:
+        match = next((p for p in nc_problems if p["slug"] == slug), None)
+        if match is not None:
+            return match
+    title = _norm_title(problem.get("title", ""))
+    return next((p for p in nc_problems if _norm_title(p["title"]) == title), None)
+
+
 def starter_for(problem: dict) -> str | None:
     """LeetCode-style starter code for a library problem, if it's one of the NeetCode
     150 (matched by its LeetCode link, else by exact title, like the tracker), else
     None. Built by tools/neetcode/build_scaffolds.py; works for either deck."""
-    nc_problems = get_data()["problems"]
-    slug = extract_leetcode_slug(problem.get("url"))
-    match = None
-    if slug:
-        match = next((p for p in nc_problems if p["slug"] == slug), None)
-    if match is None:
-        title = _norm_title(problem.get("title", ""))
-        match = next((p for p in nc_problems if _norm_title(p["title"]) == title), None)
+    match = match_problem(problem)
     return match.get("starter") if match else None
 
 

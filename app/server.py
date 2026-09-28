@@ -24,6 +24,7 @@ APP_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(APP_DIR))
 
 import claude_help  # noqa: E402
+import leetcode_fetch  # noqa: E402
 import neetcode  # noqa: E402
 import runner  # noqa: E402
 import scheduling as sched  # noqa: E402
@@ -67,10 +68,14 @@ class LocalServer(ThreadingHTTPServer):
         super().server_bind()
 
 
-def with_starter(problem: dict) -> dict:
-    """Add `starter_code` to a full problem response: LeetCode-style starter code
-    for the editor when the problem is one of the NeetCode 150, else null."""
-    problem["starter_code"] = neetcode.starter_for(problem)
+def with_extras(problem: dict) -> dict:
+    """Add `starter_code` and `neetcode_slug` to a full problem response: LeetCode-style
+    starter code for the editor, and the NeetCode 150 slug it matches (so the frontend
+    knows when to offer "Load from LeetCode") - both null when the problem isn't one of
+    the NeetCode 150. Both come from the same match (see neetcode.match_problem)."""
+    match = neetcode.match_problem(problem)
+    problem["starter_code"] = match.get("starter") if match else None
+    problem["neetcode_slug"] = match.get("slug") if match else None
     return problem
 
 
@@ -171,6 +176,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(HTTPStatus.NOT_FOUND, {"error": str(e)})
             except claude_help.ClaudeError as e:
                 self._json(e.status, {"error": e.message})
+            except leetcode_fetch.FetchError as e:
+                self._json(e.status, {"error": e.message})
             except (ConnectionError, TimeoutError):
                 raise
             except Exception:  # last resort: details go to the terminal window, not the browser
@@ -238,18 +245,18 @@ class Handler(BaseHTTPRequestHandler):
                     first_rating = None
                 with self.lock:
                     problem = store.create_problem(data, first_rating, duration_ms)
-                return self._json(201, with_starter(problem))
+                return self._json(201, with_extras(problem))
 
-        m = re.fullmatch(r"/api/problems/(\d+)(?:/(review|undo|draft))?", path)
+        m = re.fullmatch(r"/api/problems/(\d+)(?:/(review|undo|draft|leetcode-statement))?", path)
         if m:
             pid, action = int(m.group(1)), m.group(2)
             if action is None and method == "GET":
-                return self._json(200, with_starter(store.get_problem(pid)))
+                return self._json(200, with_extras(store.get_problem(pid)))
             if action is None and method in ("PATCH", "PUT"):
                 data = self._body()
                 with self.lock:
                     problem = store.update_problem(pid, data)
-                return self._json(200, with_starter(problem))
+                return self._json(200, with_extras(problem))
             if action is None and method == "DELETE":
                 with self.lock:
                     store.delete_problem(pid)
@@ -258,12 +265,12 @@ class Handler(BaseHTTPRequestHandler):
                 data = self._body()
                 with self.lock:
                     problem = store.review_problem(pid, data.get("rating"), data.get("duration_ms"))
-                return self._json(200, with_starter(problem))
+                return self._json(200, with_extras(problem))
             if action == "undo" and method == "POST":
                 data = self._body()
                 with self.lock:
                     problem = store.undo_last_review(pid, data.get("review_id"))
-                return self._json(200, with_starter(problem))
+                return self._json(200, with_extras(problem))
             if action == "draft" and method == "GET":
                 return self._json(200, store.get_draft(pid))
             # POST too: navigator.sendBeacon (used to save a draft when the tab closes) can only POST.
@@ -273,6 +280,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(HTTPStatus.BAD_REQUEST, "code is required")
                 with self.lock:
                     return self._json(200, store.save_draft(pid, data.get("code"), data.get("language")))
+            if action == "leetcode-statement" and method == "POST":
+                return self._json(200, self._leetcode_statement(pid, self._body()))
 
         if path == "/api/settings":
             if method == "GET":
@@ -373,6 +382,33 @@ class Handler(BaseHTTPRequestHandler):
             return self._claude_help_stream(data)
 
         raise ApiError(HTTPStatus.NOT_FOUND, f"no API route for {method} {path}")
+
+    def _leetcode_statement(self, pid: int, body: dict) -> dict:
+        """POST /api/problems/:id/leetcode-statement: pulls a LeetCode 150 problem's
+        statement from LeetCode into its Prompt field (see app/leetcode_fetch.py).
+        Manual only - only ever called from the owner pressing the button.
+
+        404 (via store.get_problem/update_problem) if the problem doesn't exist; 400 if
+        it doesn't match a NeetCode 150 problem; 409 if it already has a non-empty
+        prompt and `replace` wasn't sent as true. The LeetCode fetch itself runs
+        OUTSIDE self.lock (network I/O), same as Ask Claude and /api/run; only the
+        store write that follows takes the lock.
+        """
+        replace = body.get("replace", False)
+        if not isinstance(replace, bool):
+            raise ApiError(HTTPStatus.BAD_REQUEST, "replace must be true or false")
+        store = self.store
+        problem = store.get_problem(pid, with_history=False)
+        match = neetcode.match_problem(problem)
+        if match is None:
+            raise ApiError(HTTPStatus.BAD_REQUEST,
+                            "Loading from LeetCode is only available for NeetCode 150 problems.")
+        if problem["prompt"].strip() and not replace:
+            raise ApiError(HTTPStatus.CONFLICT, "This problem already has a statement. Replace it?")
+        text = leetcode_fetch.fetch_statement(match["slug"])
+        with self.lock:
+            problem = store.update_problem(pid, {"prompt": text})
+        return with_extras(problem)
 
     def _claude_help_stream(self, body: dict):
         """POST /api/claude/help/stream: same request/validation as /api/claude/help,

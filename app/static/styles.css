@@ -521,6 +521,10 @@ button.chip[aria-pressed="true"] { background: var(--accent-soft); border-color:
   overflow-y: auto;
 }
 .prompt.is-empty { color: var(--muted); font-style: italic; }
+/* A "Load from LeetCode" button right after an empty prompt placeholder (review card,
+   and the Problem page's Problem card) - not nested inside it, so it doesn't inherit
+   the italic style above. */
+.prompt.is-empty + .btn, .empty-note + .btn { margin-top: 10px; }
 .instruction {
   display: flex;
   gap: 10px;
